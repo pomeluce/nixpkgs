@@ -1,0 +1,79 @@
+name: Build Check
+
+on:
+  pull_request:
+    paths:
+      - 'pkgs/**'
+      - 'flake.nix'
+      - 'flake.lock'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Flake check
+        run: nix flake check --show-trace
+
+      - name: Find changed packages
+        id: pkgs
+        run: |
+          # 找出 PR 中改动的包目录
+          mapfile -t dirs < <(
+            git diff --name-only "origin/${{ github.base_ref }}"...HEAD \
+              | grep '^pkgs/' | cut -d'/' -f2 | sort -u
+          )
+
+          # 目录 → 属性名映射
+          declare -A map=(
+            [ccline]="ccline"
+            [cli-proxy-api]="cli-proxy-api"
+            [perry]="perry"
+            [kulala-core]="kulala-core"
+            [kulala-fmt]="kulala-fmt"
+            [rime-ice]="rime-ice"
+            [elegant-theme]="elegant-theme"
+            [apple-font]="apple-font-pingfang apple-font-pingfang-relaxed apple-font-pingfang-ui apple-font-pingfang-emoji"
+            [scripts]="ccs screenshot"
+            [wpsoffice]="wpsoffice"
+          )
+
+          attrs=()
+          for d in "${dirs[@]}"; do
+            for a in ${map[$d]:-}; do
+              attrs+=("$a")
+            done
+          done
+
+          if [ ${#attrs[@]} -eq 0 ]; then
+            echo "attrs=[]" >> "$GITHUB_OUTPUT"
+            echo "No packages to build"
+          else
+            # 输出为 JSON 数组供后续步骤使用
+            printf -v joined '%s,' "${attrs[@]}"
+            echo "attrs=[${joined%,}]" >> "$GITHUB_OUTPUT"
+            echo "Packages to build: ${attrs[*]}"
+          fi
+
+      - name: Build changed packages
+        if: steps.pkgs.outputs.attrs != '[]'
+        run: |
+          echo '${{ steps.pkgs.outputs.attrs }}' | jq -r '.[]' | while read -r attr; do
+            case "$attr" in
+              apple-font-*|wpsoffice)
+                echo "⏭ Skipping unfree: $attr"
+                ;;
+              *)
+                echo "::group::🔨 nix build .#${attr}"
+                nix build ".#${attr}" --no-link --log-lines 50
+                echo "::endgroup::"
+                ;;
+            esac
+          done

@@ -196,6 +196,30 @@ nix flake prefetch --json 2>&1
 nix build --impure '.#wpsoffice' 2>&1 | grep 'got:'
 ```
 
+## GitHub Actions 自动更新
+
+仓库配置了两个 GitHub Actions 流水线，实现自动化更新和验证。
+
+### 定时自动更新（`.github/workflows/update.yml`）
+
+每天 UTC 6:00 自动执行，也可手动触发：
+
+1. 运行 `./update.sh` 检测并应用更新
+2. `nix flake check` 评估验证
+3. `nix build` 对每个更新包执行构建，验证 hash 正确性
+4. 通过后自动创建 PR（branch: `ci/auto-update`）
+
+手动触发：GitHub → Actions → Auto Update → Run workflow，可指定 `package` 参数只更新单个包。
+
+### PR 构建验证（`.github/workflows/build-check.yml`）
+
+对任何修改 `pkgs/` 目录的 PR 自动执行：
+
+1. `nix flake check` 评估所有 derivation
+2. 找出 PR 涉及的包，逐个 `nix build` 验证
+
+> **注意：** 字体包和 WPS Office（unfree license）在 CI 中跳过构建，需本地验证。
+
 ## 测试验证
 
 > **`nix build` 和 `nix run` 不会安装任何东西到系统。**  

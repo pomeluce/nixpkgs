@@ -1,0 +1,145 @@
+name: Auto Update
+
+on:
+  schedule:
+    # 每天 UTC 6:00（北京时间 14:00）
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: '指定更新单个包（留空则全部更新）'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Setup Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      # ── 阶段 1: 运行自动更新 ──────────────────────────
+      - name: Run auto-update
+        run: |
+          if [ -n "${{ inputs.package }}" ]; then
+            nix shell nixpkgs#nix-update -c ./update.sh "${{ inputs.package }}"
+          else
+            nix shell nixpkgs#nix-update -c ./update.sh
+          fi
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if git diff --quiet --exit-code; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "✅ No updates available"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "📋 Changed files:"
+            git diff --stat
+          fi
+
+      # ── 阶段 2: 评估验证 ──────────────────────────────
+      - name: Flake check
+        if: steps.diff.outputs.changed == 'true'
+        run: nix flake check --show-trace
+
+      # ── 阶段 3: 构建验证（验证 hash 正确性）────────────
+      - name: Build updated packages
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          # 从 pkgs/default.nix 提取属性名 → 目录映射
+          declare -A attr_map=(
+            [ccline]="ccline"
+            [cli-proxy-api]="cli-proxy-api"
+            [perry]="perry"
+            [kulala-core]="kulala-core"
+            [kulala-fmt]="kulala-fmt"
+            [rime-ice]="rime-ice"
+            [elegant-theme]="elegant-theme"
+            [apple-font]="apple-font-pingfang apple-font-pingfang-relaxed apple-font-pingfang-ui apple-font-pingfang-emoji"
+            [scripts]="ccs screenshot"
+            [wpsoffice]="wpsoffice"
+          )
+
+          # 找到变更涉及的包目录
+          mapfile -t changed_dirs < <(
+            git diff --name-only | grep '^pkgs/' | cut -d'/' -f2 | sort -u
+          )
+
+          for dir in "${changed_dirs[@]}"; do
+            attrs="${attr_map[$dir]:-}"
+            if [ -z "$attrs" ]; then
+              echo "::warning ::Unknown directory pkgs/$dir, skipping build"
+              continue
+            fi
+
+            for attr in $attrs; do
+              echo "::group::🔨 nix build .#${attr}"
+
+              # 字体包和 WPS 需要 unfree 许可，CI 中跳过构建
+              case "$attr" in
+                apple-font-*|wpsoffice)
+                  echo "⏭ Skipping unfree package (requires NIXPKGS_ALLOW_UNFREE)"
+                  ;;
+                *)
+                  if nix build ".#${attr}" --no-link --log-lines 50 2>&1; then
+                    echo "✅ Build passed: ${attr}"
+                  else
+                    echo "::error ::Build failed for ${attr} — hash may be incorrect"
+                    exit 1
+                  fi
+                  ;;
+              esac
+
+              echo "::endgroup::"
+            done
+          done
+
+      # ── 阶段 4: 创建 PR ────────────────────────────────
+      - name: Create Pull Request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: 'chore: auto-update packages'
+          title: 'chore: auto-update packages'
+          body: |
+            🤖 Automated package updates by `./update.sh`.
+
+            ### Updated packages
+
+            ```
+            $(git diff --stat HEAD)
+            ```
+
+            ### Verification
+
+            - ✅ `nix flake check` passed
+            - ✅ `nix build` passed for all updated packages
+            - ⚠️ Please review hash changes before merging
+          branch: ci/auto-update
+          delete-branch: true
+          labels: automated
+
+      # ── 汇总输出 ──────────────────────────────────────
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.diff.outputs.changed }}" = "true" ]; then
+            echo "### 📦 Packages updated" >> "$GITHUB_STEP_SUMMARY"
+            git diff --stat >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ✅ All packages up-to-date" >> "$GITHUB_STEP_SUMMARY"
+          fi
