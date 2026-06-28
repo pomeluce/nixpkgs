@@ -56,11 +56,70 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: nix flake check --show-trace
 
-      # ── 阶段 3: 构建验证（验证 hash 正确性）────────────
+      # ── 阶段 3: 构建验证（自动修正 hash mismatch）─────
       - name: Build updated packages
         if: steps.diff.outputs.changed == 'true'
         run: |
-          # 从 pkgs/default.nix 提取属性名 → 目录映射
+          # ── 构建 + hash mismatch 自动修正 ─────────────
+          # nix-update 能更新主 src hash，但嵌套的 FOD
+          # （如 node_modules.outputHash、cargoHash、vendorHash）
+          # 可能滞后。此函数捕获 hash mismatch 并自动修正重试。
+          build_with_hash_fix() {
+            local attr="$1"
+            local attempt=0 max=3
+
+            while [ $attempt -lt $max ]; do
+              attempt=$((attempt + 1))
+
+              local log
+              log=$(mktemp)
+              if nix build ".#${attr}" --no-link --log-lines 50 >"$log" 2>&1; then
+                cat "$log"
+                echo "✅ Build passed: ${attr}"
+                rm -f "$log"
+                return 0
+              fi
+
+              # 检查是否为 hash mismatch
+              if grep -q "hash mismatch" "$log" 2>/dev/null; then
+                local specified got
+                specified=$(grep "specified:" "$log" | head -1 | sed -n 's/.*specified: *//p' | xargs)
+                got=$(grep "got:" "$log" | head -1 | sed -n 's/.*got: *//p' | xargs)
+
+                if [ -n "$specified" ] && [ -n "$got" ] && [ "$specified" != "$got" ]; then
+                  echo "  ⚠ Hash mismatch (attempt $attempt)"
+                  echo "    specified: $specified"
+                  echo "    got:       $got"
+
+                  # 在所有变更文件中搜索并替换旧 hash
+                  local replaced=false
+                  for f in $(git diff --name-only | grep '\.nix$'); do
+                    if grep -qF "$specified" "$f" 2>/dev/null; then
+                      echo "  🔧 Updating hash in $f"
+                      sed -i "s|$specified|$got|g" "$f"
+                      replaced=true
+                    fi
+                  done
+
+                  if $replaced; then
+                    echo "  🔄 Retrying build..."
+                    rm -f "$log"
+                    continue
+                  fi
+                fi
+              fi
+
+              # 不是 hash mismatch 或无法修复，输出日志并失败
+              cat "$log"
+              rm -f "$log"
+              echo "::error ::Build failed for ${attr}"
+              return 1
+            done
+
+            echo "::error ::Build still failing after $max hash-fix attempts for ${attr}"
+            return 1
+          }
+
           declare -A attr_map=(
             [ccline]="ccline"
             [cli-proxy-api]="cli-proxy-api"
@@ -79,6 +138,9 @@ jobs:
             git diff --name-only | grep '^pkgs/' | cut -d'/' -f2 | sort -u
           )
 
+          # 列出所有变更文件（用于 hash 替换搜索范围）
+          changed_files=$(git diff --name-only)
+
           for dir in "${changed_dirs[@]}"; do
             attrs="${attr_map[$dir]:-}"
             if [ -z "$attrs" ]; then
@@ -89,18 +151,12 @@ jobs:
             for attr in $attrs; do
               echo "::group::🔨 nix build .#${attr}"
 
-              # 字体包和 WPS 需要 unfree 许可，CI 中跳过构建
               case "$attr" in
                 apple-font-*|wpsoffice)
-                  echo "⏭ Skipping unfree package (requires NIXPKGS_ALLOW_UNFREE)"
+                  echo "⏭ Skipping unfree package"
                   ;;
                 *)
-                  if nix build ".#${attr}" --no-link --log-lines 50 2>&1; then
-                    echo "✅ Build passed: ${attr}"
-                  else
-                    echo "::error ::Build failed for ${attr} — hash may be incorrect"
-                    exit 1
-                  fi
+                  build_with_hash_fix "$attr"
                   ;;
               esac
 
