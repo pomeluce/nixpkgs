@@ -200,6 +200,11 @@ nix build --impure '.#wpsoffice' 2>&1 | grep 'got:'
 
 仓库配置了两个 GitHub Actions 流水线，实现自动化更新和验证。
 
+> **首次使用前**，需在 repo **Settings → Actions → General → Workflow permissions** 中：
+>
+> - 勾选 **"Allow GitHub Actions to create and approve pull requests"**
+> - 将 **"Read and write permissions"** 设为默认
+
 ### 定时自动更新（`.github/workflows/update.yml`）
 
 每天 UTC 6:00 自动执行，也可手动触发：

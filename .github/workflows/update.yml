@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 确保 git diff HEAD~1 可用
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v16
@@ -164,30 +166,54 @@ jobs:
             done
           done
 
-      # ── 阶段 4: 创建 PR ────────────────────────────────
+      # ── 阶段 4: 提交并创建 PR ──────────────────────────
+      # 注意: 需在 repo Settings → Actions → General 中开启
+      # "Allow GitHub Actions to create and approve pull requests"
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit -m 'chore: auto-update packages'
+          git push origin HEAD:ci/auto-update --force
+
       - name: Create Pull Request
         if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          commit-message: 'chore: auto-update packages'
-          title: 'chore: auto-update packages'
-          body: |
-            🤖 Automated package updates by `./update.sh`.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 如果已有同分支 PR 则更新，否则新建
+          existing=$(gh pr list --head ci/auto-update --state open --json number -q '.[0].number' 2>/dev/null)
 
-            ### Updated packages
+          body=$(cat <<EOF
+          🤖 Automated package updates by \`./update.sh\`.
 
-            ```
-            $(git diff --stat HEAD)
-            ```
+          ### Updated packages
 
-            ### Verification
+          \`\`\`
+          $(git diff --stat HEAD~1)
+          \`\`\`
 
-            - ✅ `nix flake check` passed
-            - ✅ `nix build` passed for all updated packages
-            - ⚠️ Please review hash changes before merging
-          branch: ci/auto-update
-          delete-branch: true
-          labels: automated
+          ### Verification
+
+          - ✅ \`nix flake check\` passed
+          - ✅ \`nix build\` passed for all updated packages
+          - ⚠️ Please review hash changes before merging
+          EOF
+          )
+
+          if [ -n "$existing" ]; then
+            echo "Updating existing PR #${existing}"
+            gh pr edit "$existing" --title 'chore: auto-update packages' --body "$body"
+          else
+            gh pr create \
+              --title 'chore: auto-update packages' \
+              --body "$body" \
+              --base main \
+              --head ci/auto-update \
+              --label automated
+          fi
 
       # ── 汇总输出 ──────────────────────────────────────
       - name: Summary
