@@ -1,0 +1,25 @@
+# === Nix ===
+result
+result-*
+# nix build 生成的符号链接
+/nix/
+# direnv (可选开启)
+.direnv/
+# .envrc 应保留在仓库里（如果用了 flake 模板）
+
+# === 编辑器 ===
+*.swp
+*.swo
+*~
+.vscode/
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# === 其他 ===
+*.bak
+*.tmp
