@@ -1,7 +1,6 @@
 {
   stdenv,
   fetchurl,
-  fontconfig,
   lib,
 }:
 stdenv.mkDerivation {
@@ -13,8 +12,6 @@ stdenv.mkDerivation {
     sha256 = "cf1d3c696c6a73ea550b8f156caa7938ffd88bf5f99a558c71b6862f6be5e003";
   };
 
-  nativeBuildInputs = [ fontconfig ];
-
   installPhase = ''
     mkdir -p $out/share/fonts/pingFangRelaxed
     cp -r * $out/share/fonts/pingFangRelaxed/
@@ -24,7 +21,7 @@ stdenv.mkDerivation {
     description = "开苹方字体（PingFang Relaxed）";
     homepage = "https://developer.apple.com/fonts/";
     license = licenses.unfree;
-    maintainers = with maintainers; [ pomeluce ];
+    maintainers = [ "pomeluce" ];
+    platforms = platforms.all;
   };
 }
-

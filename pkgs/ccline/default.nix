@@ -19,6 +19,7 @@ rustPlatform.buildRustPackage rec {
   cargoHash = "sha256-ejSDR43RUebxuHiRG3MsppDhgDpH44o+L+jfOZf0x5A=";
 
   nativeBuildInputs = [
+    git
     makeWrapper
   ];
 

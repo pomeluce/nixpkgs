@@ -1,7 +1,6 @@
 {
   stdenv,
   fetchurl,
-  fontconfig,
   lib,
 }:
 stdenv.mkDerivation {
@@ -13,8 +12,6 @@ stdenv.mkDerivation {
     sha256 = "0215ed14d69e3faecd3754ead14265d488b8fbea891a23ca1a93f7f5bdd02aa5";
   };
 
-  nativeBuildInputs = [ fontconfig ];
-
   installPhase = ''
     mkdir -p $out/share/fonts/pingFang
     cp -r * $out/share/fonts/pingFang/
@@ -24,7 +21,7 @@ stdenv.mkDerivation {
     description = "Apple 公司苹方字体";
     homepage = "https://developer.apple.com/fonts/";
     license = licenses.unfree;
-    maintainers = with maintainers; [ pomeluce ];
+    maintainers = [ "pomeluce" ];
+    platforms = platforms.all;
   };
 }
-

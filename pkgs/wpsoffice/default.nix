@@ -85,12 +85,10 @@ let
 in
 stdenv.mkDerivation rec {
   pname = "wpsoffice";
-  # version = "12.1.2.22550";
   version = "12.8.2.21176";
 
   src = fetchurl {
     url = "https://pubwps-wps365-obs.wpscdn.cn/download/Linux/${lib.last (builtins.splitVersion version)}/wps-office_${version}.AK.preload.sw_amd64.deb";
-    # hash = "sha256-LfRIgej0kAafsfOE/0Jt6OJxv7802vCgu7GKVUFqbHA=";
     hash = "sha256-kcxZ5ySWYpBJ7a8bNfp9ho4vWPZaVz2fcN+5HwQoGyw=";
   };
 
@@ -146,7 +144,7 @@ stdenv.mkDerivation rec {
     sed -i '2i [[ "$XMODIFIERS" == "@im=fcitx" ]] && export QT_IM_MODULE=fcitx' $out/bin/{wps,wpp,et,wpspdf}
 
     # allow custom fontconfig
-    sed -i '2i [[ -f ~/.config/Kingsoft/fonts/fonts.conf ]] && export FONTCONFIG_FILE=~/.config/Kingsoft/fonts/fonts.conf' usr/bin/{wps,wpp,et,wpspdf}
+    sed -i '2i [[ -f ~/.config/Kingsoft/fonts/fonts.conf ]] && export FONTCONFIG_FILE=~/.config/Kingsoft/fonts/fonts.conf' $out/bin/{wps,wpp,et,wpspdf}
 
     # Fix /bin path
     ## wps, wpp, et, wpspdf, misc, wpsclouddisk
@@ -180,6 +178,6 @@ stdenv.mkDerivation rec {
     platforms = [ "x86_64-linux" ];
     sourceProvenance = with sourceTypes; [ binaryNativeCode ];
     license = licenses.unfreeRedistributable;
-    maintainers = with maintainers; [ pomeluce ];
+    maintainers = [ "pomeluce" ];
   };
 }

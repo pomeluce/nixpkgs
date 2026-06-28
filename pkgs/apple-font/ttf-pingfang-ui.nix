@@ -1,7 +1,6 @@
 {
   stdenv,
   fetchurl,
-  fontconfig,
   lib,
 }:
 stdenv.mkDerivation {
@@ -13,8 +12,6 @@ stdenv.mkDerivation {
     sha256 = "1246b6a54ef7a0ddf1ce02da76d9ec9fcc03d948b7c6258dbeae93815e427f80";
   };
 
-  nativeBuildInputs = [ fontconfig ];
-
   installPhase = ''
     mkdir -p $out/share/fonts/pingFangUI
     cp -r * $out/share/fonts/pingFangUI/
@@ -24,7 +21,7 @@ stdenv.mkDerivation {
     description = "苹方 UI 字体(PingFang UI)";
     homepage = "https://developer.apple.com/fonts/";
     license = licenses.unfree;
-    maintainers = with maintainers; [ pomeluce ];
+    maintainers = [ "pomeluce" ];
+    platforms = platforms.all;
   };
 }
-

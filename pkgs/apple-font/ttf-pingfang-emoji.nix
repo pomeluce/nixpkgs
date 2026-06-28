@@ -1,7 +1,6 @@
 {
   stdenv,
   fetchurl,
-  fontconfig,
   lib,
 }:
 stdenv.mkDerivation {
@@ -12,8 +11,6 @@ stdenv.mkDerivation {
     url = "https://github.com/samuelngs/apple-emoji-linux/releases/download/v18.4/AppleColorEmoji.ttf";
     sha256 = "1ggahpw54rjpxirjbyarwd5gvvg1hi08zw4c1nab8dqls5xhgzd4";
   };
-
-  nativeBuildInputs = [ fontconfig ];
 
   unpackPhase = "true";
 
@@ -30,7 +27,8 @@ stdenv.mkDerivation {
     description = "Apple Color Emoji is a color typeface used by iOS and macOS to display emoji";
     homepage = "https://github.com/samuelngs/apple-emoji-linux";
     license = licenses.unfree;
-    maintainers = with maintainers; [ pomeluce ];
+    maintainers = [ "pomeluce" ];
+    platforms = platforms.all;
   };
 }
 

@@ -1,4 +1,7 @@
 { pkgs, ... }:
+let
+  kulala-core = pkgs.callPackage ./kulala-core { };
+in
 {
   apple-font-pingfang = pkgs.callPackage ./apple-font/ttf-pingfang.nix { };
   apple-font-pingfang-relaxed = pkgs.callPackage ./apple-font/ttf-pingfang-relaxed.nix { };
@@ -8,8 +11,8 @@
   ccs = pkgs.callPackage ./scripts/ccs { };
   cli-proxy-api = pkgs.callPackage ./cli-proxy-api { };
   elegant-theme = pkgs.callPackage ./elegant-theme { };
-  kulala-core = pkgs.callPackage ./kulala-core { };
-  kulala-fmt = pkgs.callPackage ./kulala-fmt { kulala-core = pkgs.callPackage ./kulala-core { }; };
+  inherit kulala-core;
+  kulala-fmt = pkgs.callPackage ./kulala-fmt { inherit kulala-core; };
   perry = pkgs.callPackage ./perry { };
   rime-ice = pkgs.callPackage ./rime-ice { };
   screenshot = pkgs.callPackage ./scripts/screenshot { };
