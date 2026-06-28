@@ -211,8 +211,7 @@ jobs:
               --title 'chore: auto-update packages' \
               --body "$body" \
               --base main \
-              --head ci/auto-update \
-              --label automated
+              --head ci/auto-update
           fi
 
       # ── 汇总输出 ──────────────────────────────────────
