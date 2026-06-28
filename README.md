@@ -107,6 +107,7 @@ apkgs.url = "path:/home/user/dev/nixpkgs";
 ```
 nixpkgs/
 ├── flake.nix          # 入口：packages + overlays.default
+├── update.sh          # 自动更新脚本
 ├── pkgs/
 │   ├── default.nix    # 包集定义，接受 { pkgs, ... }
 │   ├── apple-font/    # 苹果字体四件套
@@ -122,7 +123,174 @@ nixpkgs/
 └── LICENSE
 ```
 
-## 许可
+## 版本更新
 
-GPL-3.0 — 详见 [LICENSE](./LICENSE)。各包上游许可证以其自身声明为准。
+### 自动更新（推荐）
 
+使用 `update.sh` 脚本一键检查并更新所有可自动更新的包：
+
+```sh
+# 仅检查可用更新（不修改文件）
+./update.sh --check
+
+# 更新所有可自动更新的包
+./update.sh
+
+# 只更新指定包
+./update.sh ccline
+
+# 更新后自动 git commit（Conventional Commits 格式）
+./update.sh --commit
+```
+
+`--commit` 会自动生成符合 [Conventional Commits](https://www.conventionalcommits.org) 规范的提交信息：
+
+```
+chore(perry): update 0.5.511 → 0.5.1182
+chore(rime-ice): update 08e5594 → 6810e89
+chore(kulala-core): update 0.25.0 → 0.26.0
+```
+
+脚本依赖 [`nix-update`](https://github.com/Mic92/nix-update)（≥ 1.16.0）：
+
+```sh
+nix shell nixpkgs#nix-update
+```
+
+### 更新策略概览
+
+| 包名                 | 更新源                              | 自动化                                        |
+| -------------------- | ----------------------------------- | --------------------------------------------- |
+| `ccline`             | GitHub Release                      | ✅ `nix-update --flake`                       |
+| `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
+| `perry`              | GitHub Release（二进制）            | ✅ `nix-update --flake`                       |
+| `kulala-core`        | GitHub Release                      | ✅ `nix-update --flake`                       |
+| `kulala-fmt`         | npm registry                        | ✅ `nix-update --flake`                       |
+| `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
+| `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
+| `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
+| `wpsoffice`          | WPS CDN（无公开 API）               | ❌ 手动                                       |
+| `ccs` / `screenshot` | 本地脚本                            | — 无需更新                                    |
+
+### 手动更新字体包
+
+```sh
+# 1. 检查上游 release
+#    https://github.com/witt-bit/applePingFangFonts/releases
+
+# 2. 修改对应 .nix 文件中的 version 和 sha256
+#    pkgs/apple-font/ttf-pingfang.nix
+
+# 3. 获取新 hash
+nix-build -A apple-font-pingfang 2>&1 | grep 'got:'
+# 或
+nix flake prefetch --json 2>&1
+```
+
+### 手动更新 WPS Office
+
+```sh
+# 1. 到 https://365.wps.cn 确认最新版本号
+# 2. 修改 pkgs/wpsoffice/default.nix 中的 version
+# 3. 将 hash 改为空字符串 "" 并运行构建获取新 hash
+nix build --impure '.#wpsoffice' 2>&1 | grep 'got:'
+```
+
+## 测试验证
+
+> **`nix build` 和 `nix run` 不会安装任何东西到系统。**  
+> 产物只写入 `/nix/store/` 并由 GC 管理，`build` 仅在当前目录创建一个 `result` 符号链接，`run` 临时执行后即退出。真正「安装」需要 `nix profile install` 或在 NixOS/home-manager 配置中声明。
+
+### 快速检查（推荐每次更新后执行）
+
+```sh
+# 1. 评估所有包（确认 derivation 合法）
+nix flake check
+
+# 1b. 字体包有 unfree 许可证，需要：
+NIXPKGS_ALLOW_UNFREE=1 nix flake check --impure
+
+# 2. 构建指定包
+nix build '.#ccline'
+
+# 3. 试运行 CLI 类包
+nix run '.#ccline' -- --version
+```
+
+### 完整验证流程
+
+每次更新版本后，建议按以下顺序验证：
+
+```sh
+# === 阶段 1: 评估 ===
+# 确保所有 derivation 能正常求值
+NIXPKGS_ALLOW_UNFREE=1 nix flake check --impure
+
+# === 阶段 2: 构建 ===
+# 逐个构建包（首次或 hash 变更时需要下载依赖，耗时较长）
+nix build '.#ccline'           # Rust 包，有 cargoHash
+nix build '.#cli-proxy-api'    # Go 包，有 vendorHash
+nix build '.#perry'            # 二进制重打包，较快
+nix build '.#kulala-core'      # Bun/JS 包，有 node_modules FOD
+nix build '.#kulala-fmt'       # npm 包
+nix build '.#elegant-theme'    # GRUB 主题
+nix build '.#rime-ice'         # RIME 数据包
+nix build '.#wpsoffice'        # deb 重打包（需 --impure）
+nix build '.#screenshot'       # Nushell 脚本
+nix build '.#ccs'              # Nushell 脚本
+
+# === 阶段 3: 功能验证 ===
+# 对有 installCheck 的包（如 kulala-core），构建时自动运行：
+nix build '.#kulala-core' --rebuild
+# installCheck 会自动验证 curl 解析和 HTTP 请求生成
+
+# 其他包手动验证：
+nix run '.#ccline'                        # 检查状态栏输出
+nix run '.#ccs' use-model                 # 检查模型切换
+nix run '.#screenshot' -- --help           # 检查截图帮助
+nix run '.#perry' -- --version            # 检查版本输出
+nix run '.#cli-proxy-api' -- --help       # 检查帮助文本
+
+# RIME 数据包验证安装内容：
+nix build '.#rime-ice' --print-out-paths
+ls "$(nix build '.#rime-ice' --print-out-paths --no-link)"/share/rime-data/
+
+# GRUB 主题验证主题文件：
+nix build '.#elegant-theme' --print-out-paths
+ls "$(nix build '.#elegant-theme' --print-out-paths --no-link)"/grub/themes/
+
+# === 阶段 4: 清理 ===
+# 验证完成后清理构建缓存
+nix store gc --dry-run    # 先看会删什么
+nix store gc              # 实际清理
+```
+
+### 针对特定包类型的注意事项
+
+**Go 包（`cli-proxy-api`）：**
+
+- `vendorHash` 变化时需要更新：先用空字符串 `""` 替换 hash，构建失败后会输出正确 hash
+- 如果上游修改了 `go.mod` 的 go 版本，检查 `postPatch` 是否仍需生效
+
+**Rust 包（`ccline`）：**
+
+- `cargoHash` 变化时同理，用空字符串构建获取新 hash
+
+**Bun/JS 包（`kulala-core`）：**
+
+- `node_modules` 的 `outputHash` 也需要更新：先构建 `kulala-core.node_modules` 获取新 hash
+
+**二进制重打包（`perry`）：**
+
+- 确认新版本的 artifact 文件名是否变化（`perry-linux-x86_64.tar.gz` 等）
+- 每个平台的 hash 需分别更新
+
+**字体包：**
+
+- 字体文件较大（数百 MB），构建和下载耗时较长
+- 只需检查文件是否正确安装到 `share/fonts/`
+
+**WPS Office：**
+
+- 上游 deb 包结构可能变化，注意 `installPhase` 中的路径修正 sed 是否仍然有效
+- 构建需设置 `NIXPKGS_ALLOW_UNFREE=1`
