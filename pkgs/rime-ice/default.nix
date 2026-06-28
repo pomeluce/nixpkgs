@@ -6,7 +6,7 @@
 }:
 
 let
-  version = "08e559478d001a804ef64923526c1ffd2bbb25cb";
+  version = "6810e8916d160498620a16fef2135956fecbd485";
 in
 stdenv.mkDerivation {
   pname = "rime-ice";
@@ -17,7 +17,7 @@ stdenv.mkDerivation {
     repo = "rime-ice";
     rev = version;
     fetchSubmodules = true;
-    hash = "sha256-rhQ9c9cJ8rP8CM3eoZ+uZ03T6Fx75BZwhhDOLyg2acU=";
+    hash = "sha256-HReBFYih39ohqZ2UAX6wPjjh0KuIauJPSOjk6ZXidss=";
   };
 
   installPhase = ''
