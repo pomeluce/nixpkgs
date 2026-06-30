@@ -49,6 +49,15 @@ jobs:
             echo "✅ No updates available"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
+
+            # 提取变更摘要，用于 commit message 和 PR body
+            summary=$(git diff --stat | tail -1)
+            echo "diff_summary=${summary}" >> "$GITHUB_OUTPUT"
+
+            # 提取涉及的包名列表
+            pkgs=$(git diff --name-only | grep '^pkgs/' | cut -d'/' -f2 | sort -u | tr '\n' ' ')
+            echo "changed_pkgs=${pkgs}" >> "$GITHUB_OUTPUT"
+
             echo "📋 Changed files:"
             git diff --stat
           fi
@@ -175,7 +184,12 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
-          git commit -m 'chore: auto-update packages'
+
+          # 构建包含具体包名和变更统计的 commit message
+          pkgs="${{ steps.diff.outputs.changed_pkgs }}"
+          summary="${{ steps.diff.outputs.diff_summary }}"
+          git commit -m "chore: auto-update ${pkgs}" -m "${summary}"
+
           git push origin HEAD:ci/auto-update --force
 
       - name: Create Pull Request
@@ -183,13 +197,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 如果已有同分支 PR 则更新，否则新建
           existing=$(gh pr list --head ci/auto-update --state open --json number -q '.[0].number' 2>/dev/null)
+
+          pkgs="${{ steps.diff.outputs.changed_pkgs }}"
+          summary="${{ steps.diff.outputs.diff_summary }}"
 
           body=$(cat <<EOF
           🤖 Automated package updates by \`./update.sh\`.
 
-          ### Updated packages
+          ### Changed
+
+          ${summary}
 
           \`\`\`
           $(git diff --stat HEAD~1)
@@ -205,10 +223,10 @@ jobs:
 
           if [ -n "$existing" ]; then
             echo "Updating existing PR #${existing}"
-            gh pr edit "$existing" --title 'chore: auto-update packages' --body "$body"
+            gh pr edit "$existing" --title "chore: auto-update ${pkgs}" --body "$body"
           else
             gh pr create \
-              --title 'chore: auto-update packages' \
+              --title "chore: auto-update ${pkgs}" \
               --body "$body" \
               --base main \
               --head ci/auto-update
