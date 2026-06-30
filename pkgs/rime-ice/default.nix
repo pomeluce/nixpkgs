@@ -6,7 +6,7 @@
 }:
 
 let
-  version = "2026.06.03-unstable-2026-06-27";
+  version = "2026.06.30-unstable-2026-06-27";
 in
 stdenv.mkDerivation {
   pname = "rime-ice";
