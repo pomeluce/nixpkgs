@@ -11,11 +11,11 @@
 }:
 
 let
-  version = "0.5.1182";
+  version = "0.5.1220";
   sources = {
     x86_64-linux = {
       artifact = "perry-linux-x86_64.tar.gz";
-      hash = "sha256-0fMbgJ31xP816lXzrxtMhaXrMaPfV2O+um3ks9XqIps=";
+      hash = "sha256-4WohJajsZOfR+WPiwlMXVmcpIckTz5JLhLOlXUvYQI8=";
     };
     aarch64-linux = {
       artifact = "perry-linux-aarch64.tar.gz";
