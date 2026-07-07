@@ -6,7 +6,7 @@
 }:
 
 let
-  version = "nightly-unstable-2026-07-02";
+  version = "nightly-unstable-2026-07-07";
 in
 stdenv.mkDerivation {
   pname = "rime-ice";
@@ -17,9 +17,9 @@ stdenv.mkDerivation {
     repo = "rime-ice";
     # version 是展示用的日期字符串, rev 才是实际 commit hash
     # nix-update --version=branch=main 会同时更新两者
-    rev = "846e5fcae56f0e3f4dcd8570319ffaf377e15471";
+    rev = "6917e5040c4e1b70939960408931b8a4361612dc";
     fetchSubmodules = true;
-    hash = "sha256-Ccf3BgSHlUKGD5WHSyxxrt5HSBP+WvfsCbfWFTeWmfI=";
+    hash = "sha256-A+wMBG2rwrnqm813r67uKadPPEj8H0ekXcoy+yDJYE0=";
   };
 
   installPhase = ''
