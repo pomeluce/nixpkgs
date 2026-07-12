@@ -9,11 +9,11 @@
 
 stdenv.mkDerivation rec {
   pname = "kulala-fmt";
-  version = "4.4.0";
+  version = "4.5.0";
 
   src = fetchurl {
     url = "https://registry.npmjs.org/@mistweaverco/kulala-fmt/-/kulala-fmt-${version}.tgz";
-    hash = "sha256-nUwheNuYul/qcpe2RosZQGW/EKn4zOfRmIOSiY0m25E=";
+    hash = "sha256-IIi+RlktcDeJmvLxU2Quj0honmrasIFTd0SreMNCB3c=";
   };
 
   nativeBuildInputs = [ makeWrapper ];
