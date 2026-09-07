@@ -138,20 +138,7 @@ update_git_branch() {
 }
 
 # -----------------------------------------------------------
-# 分类 3: npm 包
-# -----------------------------------------------------------
-update_npm() {
-  local pkg="$1"
-  cyan ">>> 检查 $pkg (npm)..."
-  if $CHECK_ONLY; then
-    nix-update --flake "$pkg" 2>&1 | tail -3 || true
-  else
-    run_nix_update "$pkg"
-  fi
-}
-
-# -----------------------------------------------------------
-# 分类 4: 需手动更新的包（仅提示）
+# 分类 3: 需手动更新的包（仅提示）
 # -----------------------------------------------------------
 manual_only() {
   local pkg="$1"
@@ -184,7 +171,7 @@ if [[ -z "$TARGET" ]] || [[ "$TARGET" == "kulala-core" ]]; then
 fi
 
 if [[ -z "$TARGET" ]] || [[ "$TARGET" == "kulala-fmt" ]]; then
-  update_npm "kulala-fmt"
+  update_github_release "kulala-fmt"
 fi
 
 if [[ -z "$TARGET" ]] || [[ "$TARGET" == "rime-ice" ]]; then
@@ -221,4 +208,3 @@ if $CHECK_ONLY; then
   cyan "提示: 以上为仅检查模式，未实际修改文件。"
   cyan "      去掉 --check 参数以执行实际更新。"
 fi
-

@@ -7,6 +7,7 @@
   makeWrapper,
   writableTmpDirAsHomeHook,
 }:
+
 stdenv.mkDerivation (finalAttrs: {
   pname = "kulala-core";
   version = "0.37.0";
@@ -77,11 +78,13 @@ stdenv.mkDerivation (finalAttrs: {
 
     cp -R ${finalAttrs.node_modules}/node_modules .
     echo '{ "version": "${finalAttrs.version}" }' > packages/core/version.json
-    bun build src/cli.ts \
-      --define __KULALA_EMBED_CURL__=false \
-      --target bun \
-      --outdir dist \
-      --cwd packages/core
+    (
+      cd packages/core
+      bun build src/cli.ts \
+        --target=bun \
+        --outdir=dist \
+        --asset-naming='[name].[ext]'
+    )
 
     runHook postBuild
   '';
@@ -90,6 +93,7 @@ stdenv.mkDerivation (finalAttrs: {
     runHook preInstall
 
     install -Dm644 packages/core/dist/cli.js $out/lib/kulala-core/kulala-core.js
+    install -Dm644 packages/core/dist/liblua5.1.wasm $out/lib/kulala-core/liblua5.1.wasm
     makeWrapper ${lib.getExe bun} $out/bin/kulala-core \
       --add-flags $out/lib/kulala-core/kulala-core.js \
       --set KULALA_CURL_PATH ${lib.getExe curl}
@@ -112,7 +116,7 @@ stdenv.mkDerivation (finalAttrs: {
   '';
 
   meta = {
-    description = "Core parser and runner for kulala.nvim";
+    description = "HTTP client library powering the Kulala toolchain";
     homepage = "https://github.com/mistweaverco/kulala-core";
     license = lib.licenses.mit;
     mainProgram = "kulala-core";

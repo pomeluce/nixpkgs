@@ -1,39 +1,70 @@
 {
   lib,
   stdenv,
-  nodejs,
+  fetchFromGitHub,
+  fetchPnpmDeps,
   kulala-core,
-  fetchurl,
-  makeWrapper,
+  makeBinaryWrapper,
+  nodejs,
+  pnpm_11,
+  pnpmConfigHook,
 }:
 
-stdenv.mkDerivation rec {
+stdenv.mkDerivation (finalAttrs: {
   pname = "kulala-fmt";
   version = "4.5.3";
 
-  src = fetchurl {
-    url = "https://registry.npmjs.org/@mistweaverco/kulala-fmt/-/kulala-fmt-${version}.tgz";
-    hash = "sha256-gT6fadmw8ej0sTPIZTshKbegoyjDYZwXWOcQRZL2Dnc=";
+  strictDeps = true;
+  __structuredAttrs = true;
+
+  src = fetchFromGitHub {
+    owner = "mistweaverco";
+    repo = "kulala-fmt";
+    tag = "v${finalAttrs.version}";
+    hash = "sha256-POxmVHq/vjRr0I8ropRr5Vs021yLdmZz9UvrHM/zRIc=";
   };
 
-  nativeBuildInputs = [ makeWrapper ];
-  buildInputs = [ nodejs ];
+  pnpmDeps = fetchPnpmDeps {
+    inherit (finalAttrs) pname version src;
+    pnpm = pnpm_11;
+    fetcherVersion = 4;
+    hash = "sha256-UQA6uy4URImcV9HHMjstU8scWeJ0kNfa4tQdwcYxsG0=";
+  };
 
-  dontConfigure = true;
-  dontBuild = true;
+  nativeBuildInputs = [
+    makeBinaryWrapper
+    nodejs
+    pnpm_11
+    pnpmConfigHook
+  ];
+
+  buildPhase = ''
+    runHook preBuild
+
+    pnpm run build
+
+    runHook postBuild
+  '';
 
   installPhase = ''
     runHook preInstall
 
-    mkdir -p $out/lib/node_modules/kulala-fmt
-    cp -r . $out/lib/node_modules/kulala-fmt
-
-    mkdir -p $out/bin
-    makeWrapper ${nodejs}/bin/node $out/bin/kulala-fmt \
-      --add-flags "$out/lib/node_modules/kulala-fmt/dist/cli.cjs" \
-      --set KULALA_CORE_PATH ${kulala-core}/bin/kulala-core
+    install -Dm755 dist/cli.cjs $out/lib/kulala-fmt/cli.cjs
+    makeBinaryWrapper ${lib.getExe nodejs} $out/bin/kulala-fmt \
+      --add-flags $out/lib/kulala-fmt/cli.cjs \
+      --set KULALA_CORE_PATH ${lib.getExe kulala-core}
 
     runHook postInstall
+  '';
+
+  doInstallCheck = true;
+  installCheckPhase = ''
+    runHook preInstallCheck
+
+    $out/bin/kulala-fmt --version | grep -x ${lib.escapeShellArg finalAttrs.version}
+    printf '%s\n' 'GET https://example.com' | $out/bin/kulala-fmt format --stdin | grep 'GET https://example.com'
+
+    runHook postInstallCheck
   '';
 
   meta = {
@@ -41,6 +72,6 @@ stdenv.mkDerivation rec {
     homepage = "https://github.com/mistweaverco/kulala-fmt";
     license = lib.licenses.mit;
     mainProgram = "kulala-fmt";
-    platforms = lib.platforms.all;
+    platforms = nodejs.meta.platforms;
   };
-}
+})

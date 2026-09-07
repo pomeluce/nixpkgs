@@ -165,7 +165,7 @@ nix shell nixpkgs#nix-update
 | `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
 | `perry`              | GitHub Release（二进制）            | ✅ `nix-update --flake`                       |
 | `kulala-core`        | GitHub Release                      | ✅ `nix-update --flake`                       |
-| `kulala-fmt`         | npm registry                        | ✅ `nix-update --flake`                       |
+| `kulala-fmt`         | GitHub Release                      | ✅ `nix-update --flake`                       |
 | `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
@@ -261,7 +261,7 @@ nix build '.#ccline'           # Rust 包，有 cargoHash
 nix build '.#cli-proxy-api'    # Go 包，有 vendorHash
 nix build '.#perry'            # 二进制重打包，较快
 nix build '.#kulala-core'      # Bun/JS 包，有 node_modules FOD
-nix build '.#kulala-fmt'       # npm 包
+nix build '.#kulala-fmt'       # pnpm/Node.js 包，有 pnpmDeps
 nix build '.#elegant-theme'    # GRUB 主题
 nix build '.#rime-ice'         # RIME 数据包
 nix build '.#wpsoffice'        # deb 重打包（需 --impure）
@@ -308,6 +308,10 @@ nix store gc              # 实际清理
 **Bun/JS 包（`kulala-core`）：**
 
 - `node_modules` 的 `outputHash` 也需要更新：先构建 `kulala-core.node_modules` 获取新 hash
+
+**pnpm/Node.js 包（`kulala-fmt`）：**
+
+- `pnpmDeps` 的 hash 随 lockfile 变化，由 `nix-update` 一并更新
 
 **二进制重打包（`perry`）：**
 
