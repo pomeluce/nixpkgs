@@ -7,8 +7,8 @@
 }:
 
 let
-  version = "7.2.152";
-  hash = "sha256-vw90wcPsmU7sbp4k1XJ4mqdoQD1dWY58PYq163ZqmeQ=";
+  version = "7.2.153";
+  hash = "sha256-Ae+skwiRWmV42Zp9bVt1TGTVi040smTX2JDUo36hsWE=";
   vendorHash = "sha256-CrDp7MOr+AwJUhTovklXx3F1yaktQlvD7VYhYSY6VvY=";
 in
 buildGoModule.override { go = go_1_26; } {
