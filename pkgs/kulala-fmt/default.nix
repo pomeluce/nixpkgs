@@ -1,13 +1,10 @@
 {
   lib,
   stdenv,
-  fetchFromGitHub,
-  fetchPnpmDeps,
+  fetchurl,
   kulala-core,
   makeBinaryWrapper,
   nodejs,
-  pnpm_11,
-  pnpmConfigHook,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -17,34 +14,15 @@ stdenv.mkDerivation (finalAttrs: {
   strictDeps = true;
   __structuredAttrs = true;
 
-  src = fetchFromGitHub {
-    owner = "mistweaverco";
-    repo = "kulala-fmt";
-    tag = "v${finalAttrs.version}";
-    hash = "sha256-POxmVHq/vjRr0I8ropRr5Vs021yLdmZz9UvrHM/zRIc=";
+  src = fetchurl {
+    url = "https://registry.npmjs.org/@mistweaverco/kulala-fmt/-/kulala-fmt-${finalAttrs.version}.tgz";
+    hash = "sha256-gT6fadmw8ej0sTPIZTshKbegoyjDYZwXWOcQRZL2Dnc=";
   };
 
-  pnpmDeps = fetchPnpmDeps {
-    inherit (finalAttrs) pname version src;
-    pnpm = pnpm_11;
-    fetcherVersion = 4;
-    hash = "sha256-UQA6uy4URImcV9HHMjstU8scWeJ0kNfa4tQdwcYxsG0=";
-  };
+  nativeBuildInputs = [ makeBinaryWrapper ];
 
-  nativeBuildInputs = [
-    makeBinaryWrapper
-    nodejs
-    pnpm_11
-    pnpmConfigHook
-  ];
-
-  buildPhase = ''
-    runHook preBuild
-
-    pnpm run build
-
-    runHook postBuild
-  '';
+  dontConfigure = true;
+  dontBuild = true;
 
   installPhase = ''
     runHook preInstall

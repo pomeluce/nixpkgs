@@ -165,7 +165,7 @@ nix shell nixpkgs#nix-update
 | `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
 | `perry`              | GitHub Release（二进制）            | ✅ `nix-update --flake`                       |
 | `kulala-core`        | GitHub Release                      | ✅ `nix-update --flake`                       |
-| `kulala-fmt`         | GitHub Release                      | ✅ `nix-update --flake`                       |
+| `kulala-fmt`         | npm Registry（预构建 JS）           | ✅ `nix-update --flake`                       |
 | `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
@@ -261,7 +261,7 @@ nix build '.#ccline'           # Rust 包，有 cargoHash
 nix build '.#cli-proxy-api'    # Go 包，有 vendorHash
 nix build '.#perry'            # 二进制重打包，较快
 nix build '.#kulala-core'      # Bun/JS 包，有 node_modules FOD
-nix build '.#kulala-fmt'       # pnpm/Node.js 包，有 pnpmDeps
+nix build '.#kulala-fmt'       # npm/Node.js 包，使用预构建 CLI
 nix build '.#elegant-theme'    # GRUB 主题
 nix build '.#rime-ice'         # RIME 数据包
 nix build '.#wpsoffice'        # deb 重打包（需 --impure）
@@ -269,8 +269,9 @@ nix build '.#screenshot'       # Nushell 脚本
 nix build '.#ccs'              # Nushell 脚本
 
 # === 阶段 3: 功能验证 ===
-# 对有 installCheck 的包（如 kulala-core），构建时自动运行：
+# 对有 installCheck 的包（如 kulala-core、kulala-fmt），构建时自动运行：
 nix build '.#kulala-core' --rebuild
+nix build '.#kulala-fmt' --rebuild
 # installCheck 会自动验证 curl 解析和 HTTP 请求生成
 
 # 其他包手动验证：
@@ -309,9 +310,10 @@ nix store gc              # 实际清理
 
 - `node_modules` 的 `outputHash` 也需要更新：先构建 `kulala-core.node_modules` 获取新 hash
 
-**pnpm/Node.js 包（`kulala-fmt`）：**
+**npm/Node.js 包（`kulala-fmt`）：**
 
-- `pnpmDeps` 的 hash 随 lockfile 变化，由 `nix-update` 一并更新
+- 直接安装 `@mistweaverco/kulala-fmt` npm tarball 中预构建的 `dist/cli.cjs`，不在 Nix 中运行 pnpm 构建
+- npm 发布物变化时需更新 `src.hash`，由 `nix-update` 一并处理
 
 **二进制重打包（`perry`）：**
 
