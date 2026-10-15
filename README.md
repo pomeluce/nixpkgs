@@ -14,9 +14,6 @@
 | `ccs`                         | CLI  | Claude Code Switcher —— 模型配置切换（Nushell）  |
 | `cli-proxy-api`               | CLI  | CLIProxyAPI —— Go 服务端                         |
 | `elegant-theme`               | 主题 | Elegant GRUB2 主题                               |
-| `kulala-core`                 | CLI  | kulala —— Bun/TypeScript API 客户端              |
-| `kulala-fmt`                  | CLI  | kulala-fmt —— Node.js 格式化工具                 |
-| `perry`                       | CLI  | Perry TypeScript 编译器                          |
 | `rime-ice`                    | 数据 | RIME 雾凇拼音输入方案                            |
 | `screenshot`                  | CLI  | 截图工具（wayshot + wl-clipboard + notify-send） |
 | `wpsoffice`                   | 应用 | WPS Office（deb 重打包）                         |
@@ -47,8 +44,8 @@
       # 或在 devShell 中使用
       devShells.${system}.default = nixpkgs.legacyPackages.${system}.mkShell {
         packages = [
-          apkgs.packages.${system}.kulala-fmt
-          apkgs.packages.${system}.perry
+          apkgs.packages.${system}.ccline
+          apkgs.packages.${system}.cli-proxy-api
         ];
       };
     };
@@ -114,9 +111,6 @@ nixpkgs/
 │   ├── ccline/        # CCometixLine
 │   ├── cli-proxy-api/ # CLIProxyAPI
 │   ├── elegant-theme/ # GRUB2 主题
-│   ├── kulala-core/   # kulala 核心
-│   ├── kulala-fmt/    # kulala 格式化
-│   ├── perry/         # Perry TS 编译器
 │   ├── rime-ice/      # 雾凇拼音
 │   ├── scripts/       # Nushell 脚本工具
 │   └── wpsoffice/     # WPS Office
@@ -146,9 +140,8 @@ nixpkgs/
 `--commit` 会自动生成符合 [Conventional Commits](https://www.conventionalcommits.org) 规范的提交信息：
 
 ```
-chore(perry): update 0.5.511 → 0.5.1182
+chore(ccline): update 1.1.1 → 1.1.2
 chore(rime-ice): update 08e5594 → 6810e89
-chore(kulala-core): update 0.25.0 → 0.26.0
 ```
 
 脚本依赖 [`nix-update`](https://github.com/Mic92/nix-update)（≥ 1.16.0）：
@@ -163,9 +156,6 @@ nix shell nixpkgs#nix-update
 | -------------------- | ----------------------------------- | --------------------------------------------- |
 | `ccline`             | GitHub Release                      | ✅ `nix-update --flake`                       |
 | `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
-| `perry`              | GitHub Release（二进制）            | ✅ `nix-update --flake`                       |
-| `kulala-core`        | GitHub Release                      | ✅ `nix-update --flake`                       |
-| `kulala-fmt`         | npm Registry（预构建 JS）           | ✅ `nix-update --flake`                       |
 | `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
@@ -259,9 +249,6 @@ NIXPKGS_ALLOW_UNFREE=1 nix flake check --impure
 # 逐个构建包（首次或 hash 变更时需要下载依赖，耗时较长）
 nix build '.#ccline'           # Rust 包，有 cargoHash
 nix build '.#cli-proxy-api'    # Go 包，有 vendorHash
-nix build '.#perry'            # 二进制重打包，较快
-nix build '.#kulala-core'      # Bun/JS 包，有 node_modules FOD
-nix build '.#kulala-fmt'       # npm/Node.js 包，使用预构建 CLI
 nix build '.#elegant-theme'    # GRUB 主题
 nix build '.#rime-ice'         # RIME 数据包
 nix build '.#wpsoffice'        # deb 重打包（需 --impure）
@@ -269,16 +256,10 @@ nix build '.#screenshot'       # Nushell 脚本
 nix build '.#ccs'              # Nushell 脚本
 
 # === 阶段 3: 功能验证 ===
-# 对有 installCheck 的包（如 kulala-core、kulala-fmt），构建时自动运行：
-nix build '.#kulala-core' --rebuild
-nix build '.#kulala-fmt' --rebuild
-# installCheck 会自动验证 curl 解析和 HTTP 请求生成
-
-# 其他包手动验证：
+# 手动验证 CLI 功能：
 nix run '.#ccline'                        # 检查状态栏输出
 nix run '.#ccs' use-model                 # 检查模型切换
 nix run '.#screenshot' -- --help           # 检查截图帮助
-nix run '.#perry' -- --version            # 检查版本输出
 nix run '.#cli-proxy-api' -- --help       # 检查帮助文本
 
 # RIME 数据包验证安装内容：
@@ -305,20 +286,6 @@ nix store gc              # 实际清理
 **Rust 包（`ccline`）：**
 
 - `cargoHash` 变化时同理，用空字符串构建获取新 hash
-
-**Bun/JS 包（`kulala-core`）：**
-
-- `node_modules` 的 `outputHash` 也需要更新：先构建 `kulala-core.node_modules` 获取新 hash
-
-**npm/Node.js 包（`kulala-fmt`）：**
-
-- 直接安装 `@mistweaverco/kulala-fmt` npm tarball 中预构建的 `dist/cli.cjs`，不在 Nix 中运行 pnpm 构建
-- npm 发布物变化时需更新 `src.hash`，由 `nix-update` 一并处理
-
-**二进制重打包（`perry`）：**
-
-- 确认新版本的 artifact 文件名是否变化（`perry-linux-x86_64.tar.gz` 等）
-- 每个平台的 hash 需分别更新
 
 **字体包：**
 

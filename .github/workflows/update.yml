@@ -73,7 +73,7 @@ jobs:
         run: |
           # ── 构建 + hash mismatch 自动修正 ─────────────
           # nix-update 能更新主 src hash，但嵌套的 FOD
-          # （如 node_modules.outputHash、cargoHash、vendorHash）
+          # （如 cargoHash、vendorHash）
           # 可能滞后。此函数捕获 hash mismatch 并自动修正重试。
           build_with_hash_fix() {
             local attr="$1"
@@ -134,9 +134,6 @@ jobs:
           declare -A attr_map=(
             [ccline]="ccline"
             [cli-proxy-api]="cli-proxy-api"
-            [perry]="perry"
-            [kulala-core]="kulala-core"
-            [kulala-fmt]="kulala-fmt"
             [rime-ice]="rime-ice"
             [elegant-theme]="elegant-theme"
             [apple-font]="apple-font-pingfang apple-font-pingfang-relaxed apple-font-pingfang-ui apple-font-pingfang-emoji"

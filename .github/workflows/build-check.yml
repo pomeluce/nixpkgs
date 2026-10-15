@@ -35,9 +35,6 @@ jobs:
           declare -A map=(
             [ccline]="ccline"
             [cli-proxy-api]="cli-proxy-api"
-            [perry]="perry"
-            [kulala-core]="kulala-core"
-            [kulala-fmt]="kulala-fmt"
             [rime-ice]="rime-ice"
             [elegant-theme]="elegant-theme"
             [apple-font]="apple-font-pingfang apple-font-pingfang-relaxed apple-font-pingfang-ui apple-font-pingfang-emoji"

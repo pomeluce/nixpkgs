@@ -123,20 +123,7 @@ update_github_release() {
 }
 
 # -----------------------------------------------------------
-# 分类 2: npm Registry 发布包
-# -----------------------------------------------------------
-update_npm_package() {
-  local pkg="$1"
-  cyan ">>> 检查 $pkg (npm Registry)..."
-  if $CHECK_ONLY; then
-    nix-update --flake "$pkg" --build 2>&1 | tail -3 || true
-  else
-    run_nix_update "$pkg"
-  fi
-}
-
-# -----------------------------------------------------------
-# 分类 3: Git 分支跟踪包（无 release tag）
+# 分类 2: Git 分支跟踪包（无 release tag）
 # -----------------------------------------------------------
 update_git_branch() {
   local pkg="$1"
@@ -151,7 +138,7 @@ update_git_branch() {
 }
 
 # -----------------------------------------------------------
-# 分类 4: 需手动更新的包（仅提示）
+# 分类 3: 需手动更新的包（仅提示）
 # -----------------------------------------------------------
 manual_only() {
   local pkg="$1"
@@ -173,18 +160,6 @@ fi
 
 if [[ -z "$TARGET" ]] || [[ "$TARGET" == "cli-proxy-api" ]]; then
   update_github_release "cli-proxy-api"
-fi
-
-if [[ -z "$TARGET" ]] || [[ "$TARGET" == "perry" ]]; then
-  update_github_release "perry"
-fi
-
-if [[ -z "$TARGET" ]] || [[ "$TARGET" == "kulala-core" ]]; then
-  update_github_release "kulala-core"
-fi
-
-if [[ -z "$TARGET" ]] || [[ "$TARGET" == "kulala-fmt" ]]; then
-  update_npm_package "kulala-fmt"
 fi
 
 if [[ -z "$TARGET" ]] || [[ "$TARGET" == "rime-ice" ]]; then
