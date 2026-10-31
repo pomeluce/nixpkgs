@@ -23,6 +23,11 @@ rustPlatform.buildRustPackage rec {
     makeWrapper
   ];
 
+  preCheck = ''
+    # 上游测试要求源码位于 Git 仓库中，但 fetchFromGitHub 的归档不包含 .git。
+    git init --initial-branch=main
+  '';
+
   postInstall = ''
     ln -s $out/bin/ccometixline $out/bin/ccline
   '';
