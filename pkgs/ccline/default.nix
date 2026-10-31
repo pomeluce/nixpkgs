@@ -7,16 +7,16 @@
 }:
 rustPlatform.buildRustPackage rec {
   pname = "ccline";
-  version = "1.1.2";
+  version = "2.0.1";
 
   src = fetchFromGitHub {
     owner = "Haleclipse";
     repo = "CCometixLine";
     rev = "v${version}";
-    hash = "sha256-W6+eGp8S6weOlS5WpmMR9JT4BVtyhettmtaFTStmyQk=";
+    hash = "sha256-tzEo+8M86C6EdN31rDVqt8+SCYqeEXRCVFsbtbW41XY=";
   };
 
-  cargoHash = "sha256-ejSDR43RUebxuHiRG3MsppDhgDpH44o+L+jfOZf0x5A=";
+  cargoHash = "sha256-dTsuyklpaiYqp5Rq1Q7YUBrmQUH42ve2UY+MwUqF7Ek=";
 
   nativeBuildInputs = [
     git
