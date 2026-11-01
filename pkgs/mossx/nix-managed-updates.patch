@@ -106,26 +106,6 @@
      updateChecking: "업데이트 확인 중…",
      updateLatest: "최신 버전입니다",
      updateLatestDetail: "최신 버전입니다 · 최신 v{{version}} ({{date}} 출시)",
---- a/src-tauri/src/lib.rs
-+++ b/src-tauri/src/lib.rs
-@@ -121,7 +121,6 @@
-     plugins::asset_protocol::register(preview_protocol::register(tauri::Builder::default()))
-         .plugin(tauri_plugin_opener::init())
-         .plugin(tauri_plugin_dialog::init())
--        .plugin(tauri_plugin_updater::Builder::new().build())
-         .plugin(tauri_plugin_process::init())
-         .plugin(
-             tauri_plugin_global_shortcut::Builder::new()
---- a/src-tauri/capabilities/default.json
-+++ b/src-tauri/capabilities/default.json
-@@ -21,7 +21,6 @@
-       ]
-     },
-     "dialog:default",
--    "updater:default",
-     "process:default"
-   ]
- }
 --- /dev/null
 +++ b/src/features/update/managed-updates.test.tsx
 @@ -0,0 +1,49 @@

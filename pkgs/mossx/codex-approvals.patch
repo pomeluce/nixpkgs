@@ -1,0 +1,367 @@
+--- a/docs/ui-ux-spec.zh-CN.md
++++ b/docs/ui-ux-spec.zh-CN.md
+@@ -22,6 +22,11 @@
+ 8. [待收敛](#8-待收敛)
+
+ ---
++
++Nix 包补丁：Codex 本地普通会话通过现有提问卡处理命令执行、文件修改及额外权限审批。
++卡片显示操作与请求范围，单选 Allow once / Reject；关闭按拒绝处理，额外权限仅限当前轮次。
++自动／手动使用 on-request 并由用户审批；计划与隔离只读任务不开放审批；全部跳过保持原行为。
++WSL exec 回退不支持此交互。服务端取消请求或回合结束时卡片按现有提问生命周期收敛。
+
+ ## 1. 维护约定
+
+--- a/src-tauri/src/engine/codex_app.rs
++++ b/src-tauri/src/engine/codex_app.rs
+@@ -22,10 +22,8 @@
+ //! shapes are terminal so a newer CLI cannot hang the pump until the prompt
+ //! timeout.
+ //!
+-//! Approvals are declined, never granted: the CLI runs with
+-//! `approvalPolicy: "never"` and the sandbox is the enforced boundary, exactly
+-//! as the exec transport's auto-decline behaves, so answering "approve" here
+-//! would hand the model a privilege the app never offered.
++//! Ordinary local runs ask for approval through the existing question cards.
++//! Isolated read-only tasks and planning runs keep approvals disabled.
+ //!
+ //! Plan approval (next_turn): a `permission == "plan"` run starts its turn
+ //! with `collaborationMode {mode:"plan"}` (EXPERIMENTAL in the 0.154.0
+@@ -52,6 +50,9 @@
+ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+ use tokio::sync::Mutex as TokioMutex;
+ use tokio::time::{timeout, Instant};
++
++#[path = "codex_approvals.rs"]
++mod approvals;
+
+ use super::codex_read_only;
+ use super::images;
+@@ -108,6 +109,7 @@
+ /// Per-run projection state: what streamed, and what to report at settle time.
+ #[derive(Default)]
+ struct TurnView {
++    approvals_enabled: bool,
+     /// Item id whose text already streamed as deltas. A completed
+     /// `agentMessage` repeats that text in full, and a `message` row appends as
+     /// a settled snapshot (the UI collapses the live row first), so replaying
+@@ -325,6 +327,16 @@
+     };
+     let params = value.get("params").cloned().unwrap_or(Value::Null);
+     match value.get("id").filter(|id| !id.is_null()) {
++        Some(id) if view.approvals_enabled && matches!(method,
++            "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" | "item/permissions/requestApproval") => {
++            let (card, context) = approvals::card(id, method, &params);
++            core.dispatch_event(state, EngineEvent::Question {
++                request_id: id.to_string(),
++                tool_use_id: params.get("itemId").and_then(Value::as_str).map(str::to_string),
++                input: json!({"questions":[card],"codexApp":{"approval":context}}),
++            });
++            Handled::Parked
++        }
+         Some(id) => handle_server_request(core, state, method, id, &params),
+         None => handle_notification(core, state, view, method, &params),
+     }
+@@ -352,9 +364,7 @@
+             park_question(core, state, id, params, cards, ids);
+             Handled::Parked
+         }
+-        // Always declined: `approvalPolicy` is pinned to "never" and the
+-        // sandbox is the boundary this app chose, so approving here would be a
+-        // privilege escalation the exec transport never allowed either.
++        // Non-interactive planning and isolated tasks never request grants.
+         "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
+             Handled::Answer(jsonrpc_result_response(
+                 id,
+@@ -383,6 +393,17 @@
+     params: &Value,
+ ) -> Handled {
+     match method {
++        "serverRequest/resolved" => {
++            if let Some(id) = params.get("requestId") {
++                let key = id.to_string();
++                let pending = core.registry.get(&core.run_id).and_then(|entry| {
++                    entry.questions.lock().ok()?.get(&key).cloned()
++                });
++                if pending.as_ref().is_some_and(|value| value.pointer("/codexApp/approval").is_some()) {
++                    core.dispatch_event(state, EngineEvent::QuestionSettled { request_id: key });
++                }
++            }
++        }
+         "item/agentMessage/delta" => {
+             if let Some(delta) = params.get("delta").and_then(Value::as_str) {
+                 if !delta.is_empty() {
+@@ -948,6 +969,9 @@
+ /// asked is an error instead: it means the card and the request drifted, and
+ /// silently dropping the answer would park the turn forever.
+ pub(super) fn answer_frame(parked: &Value, answers: Option<&Value>) -> Result<Value, String> {
++    if let Some(context) = parked.get("approval") {
++        return approvals::answer(context, answers);
++    }
+     let id = parked
+         .get("rpcId")
+         .ok_or_else(|| "parked question lost its rpc id".to_string())?;
+@@ -1642,8 +1666,7 @@
+         }
+     }
+     // Resuming re-attaches the conversation the app already holds; starting
+-    // opens a new one. Both take the run's sandbox, and approvals stay pinned
+-    // off: this client has no approval UI and the sandbox is the boundary.
++    // opens a new one. Reapply the selected policy to both paths.
+     let deadline = Instant::now()
+         + if req.session_id.is_some() {
+             RESUME_TIMEOUT
+@@ -1653,7 +1676,12 @@
+     let (method, mut params) = thread_open_request(req.session_id.as_deref());
+     params["cwd"] = json!(req.workspace.to_string_lossy());
+     params["sandbox"] = json!(sandbox_for(req.permission.as_deref()));
+-    params["approvalPolicy"] = json!("never");
++    let approval_policy = approvals::policy(req.permission.as_deref(), codex_read_only::requested(req));
++    view.approvals_enabled = approval_policy != "never";
++    params["approvalPolicy"] = json!(approval_policy);
++    if view.approvals_enabled {
++        params["config"] = json!({"approvals_reviewer":"user"});
++    }
+     if codex_read_only::requested(req) {
+         params["ephemeral"] = json!(true);
+         params["dynamicTools"] = json!([]);
+@@ -2665,7 +2693,7 @@
+     assert.equal(params.capabilities.experimentalApi, resumed);
+     result = {};
+   } else if (method === 'thread/resume' || method === 'thread/start') {
+-    assert.equal(params.approvalPolicy, 'never');
++    assert.equal(params.approvalPolicy, 'on-request');
+     assert.equal(params.sandbox, 'workspace-write');
+     assert.equal(params.excludeTurns, resumed ? true : undefined);
+     assert.equal(params.threadId, resumed ? 'thread-123' : undefined);
+@@ -2981,6 +3009,32 @@
+     }
+
+     #[tokio::test]
++    async fn permission_request_parks_until_an_explicit_user_decision() {
++        for method in ["item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval"] {
++            let (core, _registry, emitter) = test_core();
++            let mut state = TurnState::new(None);
++            let mut view = TurnView { approvals_enabled: true, ..Default::default() };
++            assert!(matches!(route(&core, &mut state, &mut view,
++                &json!({"jsonrpc":"2.0","id":"grant-1","method":method,"params":{"command":"git commit","permissions":{"network":{"enabled":true}}}})), Handled::Parked));
++            let entry = core.registry.get(&core.run_id).unwrap();
++            let parked = entry.questions.lock().unwrap().get("\"grant-1\"").unwrap().clone();
++            let context = &parked["codexApp"];
++            let title = context["approval"]["question"].as_str().unwrap();
++            let frame = answer_frame(context, Some(&json!({title:"Allow once"}))).unwrap();
++            assert_eq!(frame["id"], json!("grant-1"));
++            if method == "item/permissions/requestApproval" {
++                assert_eq!(frame["result"], json!({"permissions":{"network":{"enabled":true}},"scope":"turn"}));
++            } else {
++                assert_eq!(frame["result"], json!({"decision":"accept"}));
++                assert_eq!(answer_frame(context, None).unwrap()["result"], json!({"decision":"decline"}));
++            }
++            route(&core, &mut state, &mut view, &json!({"method":"serverRequest/resolved","params":{"requestId":"grant-1"}}));
++            assert!(entry.questions.lock().unwrap().is_empty());
++            assert_eq!(flushed(&core, &emitter).iter().map(|(kind, _)| kind.as_str()).collect::<Vec<_>>(), ["question", "question_settled"]);
++        }
++    }
++
++    #[tokio::test]
+     async fn route_declines_an_approval_that_was_never_going_to_be_granted() {
+         let (core, _registry, _emitter) = test_core();
+         let mut state = TurnState::new(None);
+--- a/src/features/chat/question.test.tsx
++++ b/src/features/chat/question.test.tsx
+@@ -102,6 +102,26 @@
+
+   afterEach(() => {
+     vi.clearAllMocks();
++  });
++
++  it.each(["Allow once", "Reject", null])("Codex approval forwards only the user's choice: %s", async (choice) => {
++    const key = sessionKey("codex", "s-1", "/tmp/ws");
++    useChatStore.setState({ bySession: { [key]: { ...EMPTY_SESSION, messages: [] } } });
++    const event = questionEvent();
++    event.engine = "codex";
++    event.runId = `codex-approval-${choice}`;
++    event.data.input.questions[0] = {
++      question: "Codex: allow command execution?\ngit commit",
++      header: "Codex approval",
++      options: [{ label: "Allow once", description: "" }, { label: "Reject", description: "" }],
++    };
++    handleEngineEvents([event], deps());
++    const row = useChatStore.getState().bySession[key].messages.find((message) => message.role === "question")!;
++    expect(ipc.answerQuestion).not.toHaveBeenCalled();
++    expect(row.question?.status).toBe("pending");
++    const answers = choice ? { [event.data.input.questions[0].question]: choice } : null;
++    await useChatStore.getState().respondToQuestion(key, row.seq, answers);
++    expect(ipc.answerQuestion).toHaveBeenCalledExactlyOnceWith(event.runId, "req-1", answers);
+   });
+
+   it("a question event appends one pending card", () => {
+--- /dev/null
++++ b/src-tauri/src/engine/codex_approvals.rs
+@@ -0,0 +1,166 @@
++use serde_json::{json, Map, Value};
++
++pub(super) fn policy(permission: Option<&str>, isolated: bool) -> &'static str {
++    if isolated || matches!(permission, Some("plan" | "bypass")) {
++        "never"
++    } else {
++        "on-request"
++    }
++}
++
++pub(super) fn card(id: &Value, method: &str, params: &Value) -> (Value, Value) {
++    let permissions = method == "item/permissions/requestApproval";
++    let mut details = Map::new();
++    for key in [
++        "reason",
++        "command",
++        "cwd",
++        "grantRoot",
++        "additionalPermissions",
++        "permissions",
++        "networkApprovalContext",
++    ] {
++        if let Some(value) = params.get(key).filter(|value| !value.is_null()) {
++            details.insert(key.into(), value.clone());
++        }
++    }
++    let title = if permissions {
++        "Codex: grant requested permissions?"
++    } else if method == "item/fileChange/requestApproval" {
++        "Codex: allow file changes?"
++    } else {
++        "Codex: allow command execution?"
++    };
++    let question = format!(
++        "{title}\n{}",
++        serde_json::to_string_pretty(&details).unwrap()
++    );
++    let can_accept = params
++        .get("availableDecisions")
++        .and_then(Value::as_array)
++        .map_or(true, |choices| {
++            choices.iter().any(|choice| choice == "accept")
++        });
++    let mut choices = Map::new();
++    if can_accept {
++        choices.insert("Allow once".into(), if permissions {
++            json!({"permissions": params.get("permissions").cloned().unwrap_or(json!({})), "scope": "turn"})
++        } else { json!({"decision": "accept"}) });
++    }
++    let reject = if permissions {
++        json!({"permissions": {}})
++    } else {
++        json!({"decision": "decline"})
++    };
++    choices.insert("Reject".into(), reject.clone());
++    let options: Vec<Value> = ["Allow once", "Reject"]
++        .into_iter()
++        .filter(|label| choices.contains_key(*label))
++        .map(|label| json!({"label":label}))
++        .collect();
++    (
++        json!({"question":question,"header":"Codex approval","multiSelect":false,"options":options}),
++        json!({"rpcId":id,"question":question,"choices":choices,"reject":reject}),
++    )
++}
++
++pub(super) fn answer(context: &Value, answers: Option<&Value>) -> Result<Value, String> {
++    let result = match answers {
++        None => context["reject"].clone(),
++        Some(answers) => {
++            let answers = answers.as_object().ok_or("Invalid Codex approval answer")?;
++            let title = context["question"]
++                .as_str()
++                .ok_or("Missing approval question")?;
++            if answers.len() != 1 {
++                return Err("Choose exactly one approval option".into());
++            }
++            let label = answers
++                .get(title)
++                .and_then(Value::as_str)
++                .ok_or("Missing approval choice")?;
++            context["choices"]
++                .get(label)
++                .cloned()
++                .ok_or("Unknown approval choice")?
++        }
++    };
++    Ok(json!({"jsonrpc":"2.0","id":context["rpcId"],"result":result}))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn policy_preserves_restricted_runs() {
++        for mode in [None, Some("auto"), Some("manual")] {
++            assert_eq!(policy(mode, false), "on-request");
++        }
++        for mode in [Some("plan"), Some("bypass")] {
++            assert_eq!(policy(mode, false), "never");
++        }
++        assert_eq!(policy(Some("auto"), true), "never");
++    }
++    #[test]
++    fn command_and_file_approval_require_a_declared_user_choice() {
++        for method in [
++            "item/commandExecution/requestApproval",
++            "item/fileChange/requestApproval",
++        ] {
++            for id in [json!(7), json!("approval-7")] {
++                let (card, context) = card(
++                    &id,
++                    method,
++                    &json!({"command":"git commit","cwd":"/project","reason":"write metadata"}),
++                );
++                let title = card["question"].as_str().unwrap();
++                assert!(title.contains("git commit"));
++                let accepted = answer(&context, Some(&json!({title:"Allow once"}))).unwrap();
++                assert_eq!(accepted["id"], id);
++                assert_eq!(accepted["result"], json!({"decision":"accept"}));
++                assert_eq!(
++                    answer(&context, None).unwrap()["result"],
++                    json!({"decision":"decline"})
++                );
++                assert_eq!(
++                    answer(&context, Some(&json!({title:"Reject"}))).unwrap()["result"],
++                    json!({"decision":"decline"})
++                );
++                assert!(answer(&context, Some(&json!({title:"acceptForSession"}))).is_err());
++                assert!(answer(&context, Some(&json!({"another question":"Allow once"}))).is_err());
++            }
++        }
++    }
++    #[test]
++    fn only_advertised_decisions_can_be_selected() {
++        let (card, context) = card(
++            &json!(2),
++            "item/commandExecution/requestApproval",
++            &json!({"availableDecisions":["decline"]}),
++        );
++        assert_eq!(card["options"].as_array().unwrap().len(), 1);
++        assert!(answer(
++            &context,
++            Some(&json!({card["question"].as_str().unwrap():"Allow once"}))
++        )
++        .is_err());
++    }
++    #[test]
++    fn permission_grant_is_exact_and_turn_scoped() {
++        let requested = json!({"network":{"enabled":true}});
++        let (card, context) = card(
++            &json!(3),
++            "item/permissions/requestApproval",
++            &json!({"permissions":requested}),
++        );
++        let title = card["question"].as_str().unwrap();
++        assert_eq!(
++            answer(&context, Some(&json!({title:"Allow once"}))).unwrap()["result"],
++            json!({"permissions":requested,"scope":"turn"})
++        );
++        assert_eq!(
++            answer(&context, None).unwrap()["result"],
++            json!({"permissions":{}})
++        );
++    }
++}

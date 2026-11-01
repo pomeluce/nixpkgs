@@ -50,6 +50,8 @@ rustPlatform.buildRustPackage (finalAttrs: {
   patches = [
     ./nix-managed-updates.patch
     ./frameless-linux.patch
+    ./codex-approvals.patch
+    ./codex-approval-ui.patch
   ];
 
   nativeBuildInputs = [
@@ -83,6 +85,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
   };
 
   postPatch = ''
+    node ${./disable-native-updater.cjs}
     jq 'del(.plugins.updater) | .bundle.createUpdaterArtifacts = false | .build.beforeBuildCommand = "pnpm build"' \
       src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
     mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
