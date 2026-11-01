@@ -162,6 +162,10 @@ if [[ -z "$TARGET" ]] || [[ "$TARGET" == "cli-proxy-api" ]]; then
   update_github_release "cli-proxy-api"
 fi
 
+if [[ -z "$TARGET" ]] || [[ "$TARGET" == "mossx" ]]; then
+  update_github_release "mossx"
+fi
+
 if [[ -z "$TARGET" ]] || [[ "$TARGET" == "rime-ice" ]]; then
   update_git_branch "rime-ice" "main"
 fi

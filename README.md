@@ -14,9 +14,16 @@
 | `ccs`                         | CLI  | Claude Code Switcher —— 模型配置切换（Nushell）  |
 | `cli-proxy-api`               | CLI  | CLIProxyAPI —— Go 服务端                         |
 | `elegant-theme`               | 主题 | Elegant GRUB2 主题                               |
+| `mossx`                       | 应用 | MossX（CC GUI）—— 多引擎 AI 编程桌面客户端       |
 | `rime-ice`                    | 数据 | RIME 雾凇拼音输入方案                            |
 | `screenshot`                  | CLI  | 截图工具（wayshot + wl-clipboard + notify-send） |
 | `wpsoffice`                   | 应用 | WPS Office（deb 重打包）                         |
+
+`mossx` 从稳定版源码构建，首版仅支持 `x86_64-linux`。包属性、启动命令和桌面入口均为
+`mossx`，保留上游 CC GUI 的应用 ID、配置目录及界面品牌。Claude Code、Codex 等引擎 CLI
+需按需单独安装，并确保桌面会话的 `PATH` 包含这些命令；本包不捆绑引擎。
+应用内自动更新已禁用，请通过 Nix 更新软件。
+Linux 主窗口不显示系统标题栏，使用应用内的关闭、最小化和最大化按钮，可拖动顶部空白区域移动窗口。
 
 ## 使用方式
 
@@ -111,6 +118,7 @@ nixpkgs/
 │   ├── ccline/        # CCometixLine
 │   ├── cli-proxy-api/ # CLIProxyAPI
 │   ├── elegant-theme/ # GRUB2 主题
+│   ├── mossx/         # MossX（Tauri + Rust + pnpm 源码构建）
 │   ├── rime-ice/      # 雾凇拼音
 │   ├── scripts/       # Nushell 脚本工具
 │   └── wpsoffice/     # WPS Office
@@ -156,6 +164,7 @@ nix shell nixpkgs#nix-update
 | -------------------- | ----------------------------------- | --------------------------------------------- |
 | `ccline`             | GitHub Release                      | ✅ `nix-update --flake`                       |
 | `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
+| `mossx`              | GitHub Release（Rust + pnpm）       | ✅ `nix-update --flake`                       |
 | `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
@@ -249,6 +258,7 @@ NIXPKGS_ALLOW_UNFREE=1 nix flake check --impure
 # 逐个构建包（首次或 hash 变更时需要下载依赖，耗时较长）
 nix build '.#ccline'           # Rust 包，有 cargoHash
 nix build '.#cli-proxy-api'    # Go 包，有 vendorHash
+nix build '.#mossx'            # Tauri 包，有 cargoHash 和 pnpmDeps.hash（x86_64-linux）
 nix build '.#elegant-theme'    # GRUB 主题
 nix build '.#rime-ice'         # RIME 数据包
 nix build '.#wpsoffice'        # deb 重打包（需 --impure）

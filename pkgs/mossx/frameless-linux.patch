@@ -1,0 +1,119 @@
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -311,6 +311,10 @@
+             // 隐藏建窗，摆好几何再 show：最大化必须发生在几何之后，否则系统
+             // 记录的「还原矩形」是建窗默认值，取消最大化会跳回错误尺寸。
+             .visible(false);
++            #[cfg(target_os = "linux")]
++            {
++                window_builder = window_builder.decorations(false);
++            }
+             #[cfg(target_os = "macos")]
+             {
+                 // 原 tauri.conf.json: titleBarStyle "Overlay" + hiddenTitle true。
+--- a/src/features/settings/titlebar.ts
++++ b/src/features/settings/titlebar.ts
+@@ -12,7 +12,10 @@
+  * 负责把已落盘的样式读出来，首次渲染会先以 native 出现、随后一次修正。
+  */
+ export function useTitlebarStyle(): TitlebarStyle {
+-  const [style, setStyle] = useState<TitlebarStyle>("native");
++  // Nix Linux builds use the same custom controls as frameless Windows.
++  const [style, setStyle] = useState<TitlebarStyle>(
++    !isWeb && import.meta.env.VITE_FRAMELESS_WINDOW === "1" ? "mac" : "native",
++  );
+   useEffect(() => {
+     // 网页访问模式（Windows 浏览器）没有窗口 API，也不该出现自绘按钮。
+     if (!IS_WINDOWS || isWeb) return;
+@@ -31,9 +34,11 @@
+ }
+
+ /**
+- * 是否要渲染自绘的三色窗口按钮（仅 Windows 桌面 + 仿 mac 标题栏）。
++ * 是否要渲染自绘的三色窗口按钮（Windows 仿 mac 标题栏或 Nix Linux 无边框窗口）。
+  * 页签条、侧栏条、发丝线判定三处共用，保持同一套判定。
+  */
+ export function needsWindowControls(style: TitlebarStyle): boolean {
+-  return IS_WINDOWS && !isWeb && style === "mac";
++  return !isWeb && (
++    import.meta.env.VITE_FRAMELESS_WINDOW === "1" || (IS_WINDOWS && style === "mac")
++  );
+ }
+--- /dev/null
++++ b/src/features/settings/titlebar.test.tsx
+@@ -0,0 +1,75 @@
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { afterEach, beforeEach, expect, it, vi } from "vitest";
++
++const { platform, win, getSettings } = vi.hoisted(() => ({
++  platform: { windows: false, web: false },
++  win: {
++    isMaximized: vi.fn(async () => false),
++    onResized: vi.fn(async () => () => {}),
++    close: vi.fn(async () => {}),
++    minimize: vi.fn(async () => {}),
++    toggleMaximize: vi.fn(async () => {}),
++  },
++  getSettings: vi.fn(async () => ({ titlebar: "mac" })),
++}));
++vi.mock("@/lib/platform", () => ({
++  get IS_WINDOWS() { return platform.windows; },
++  get isWeb() { return platform.web; },
++}));
++vi.mock("@/lib/ipc", () => ({ ipc: { getAppSettings: getSettings } }));
++vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => win }));
++
++import { WindowControls } from "@/components/application/window-controls";
++import { needsWindowControls, useTitlebarStyle } from "./titlebar";
++
++let container: HTMLDivElement;
++let root: Root;
++function Frame() {
++  const style = useTitlebarStyle();
++  return <div data-style={style}>{needsWindowControls(style) && <WindowControls />}</div>;
++}
++beforeEach(() => {
++  vi.clearAllMocks();
++  vi.stubEnv("VITE_FRAMELESS_WINDOW", "1");
++  platform.windows = false;
++  platform.web = false;
++  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(async () => {
++  await act(async () => root.unmount());
++  container.remove();
++  vi.unstubAllEnvs();
++});
++
++it("frameless desktop renders working window controls on its first render", async () => {
++  await act(async () => root.render(<Frame />));
++  expect(container.firstElementChild?.getAttribute("data-style")).toBe("mac");
++  expect(getSettings).not.toHaveBeenCalled();
++  expect(container.querySelectorAll("button")).toHaveLength(3);
++  for (const label of ["关闭", "最小化", "最大化"]) {
++    const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
++    expect(button).not.toBeNull();
++    await act(async () => button!.click());
++  }
++  expect(win.close).toHaveBeenCalledOnce();
++  expect(win.minimize).toHaveBeenCalledOnce();
++  expect(win.toggleMaximize).toHaveBeenCalledOnce();
++});
++it("web access never renders native window controls", async () => {
++  platform.web = true;
++  await act(async () => root.render(<Frame />));
++  expect(container.querySelectorAll("button")).toHaveLength(0);
++  expect(getSettings).not.toHaveBeenCalled();
++});
++it("decorated desktop keeps the existing controls policy", () => {
++  vi.stubEnv("VITE_FRAMELESS_WINDOW", "");
++  expect(needsWindowControls("native")).toBe(false);
++  expect(needsWindowControls("mac")).toBe(false);
++  platform.windows = true;
++  expect(needsWindowControls("native")).toBe(false);
++  expect(needsWindowControls("mac")).toBe(true);
++});

@@ -8,6 +8,7 @@
   ccs = pkgs.callPackage ./scripts/ccs { };
   cli-proxy-api = pkgs.callPackage ./cli-proxy-api { };
   elegant-theme = pkgs.callPackage ./elegant-theme { };
+  mossx = pkgs.callPackage ./mossx { };
   rime-ice = pkgs.callPackage ./rime-ice { };
   screenshot = pkgs.callPackage ./scripts/screenshot { };
   wpsoffice = pkgs.libsForQt5.callPackage ./wpsoffice { };

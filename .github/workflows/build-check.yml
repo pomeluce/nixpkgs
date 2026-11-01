@@ -14,13 +14,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: DeterminateSystems/nix-installer-action@v16
 
       - uses: DeterminateSystems/magic-nix-cache-action@v8
 
       - name: Flake check
-        run: nix flake check --show-trace
+        env:
+          NIXPKGS_ALLOW_UNFREE: '1'
+        run: nix flake check --impure --show-trace
 
       - name: Find changed packages
         id: pkgs
@@ -35,6 +39,7 @@ jobs:
           declare -A map=(
             [ccline]="ccline"
             [cli-proxy-api]="cli-proxy-api"
+            [mossx]="mossx"
             [rime-ice]="rime-ice"
             [elegant-theme]="elegant-theme"
             [apple-font]="apple-font-pingfang apple-font-pingfang-relaxed apple-font-pingfang-ui apple-font-pingfang-emoji"
@@ -54,8 +59,8 @@ jobs:
             echo "No packages to build"
           else
             # 输出为 JSON 数组供后续步骤使用
-            printf -v joined '%s,' "${attrs[@]}"
-            echo "attrs=[${joined%,}]" >> "$GITHUB_OUTPUT"
+            attrs_json=$(printf '%s\n' "${attrs[@]}" | jq -R . | jq -sc .)
+            echo "attrs=${attrs_json}" >> "$GITHUB_OUTPUT"
             echo "Packages to build: ${attrs[*]}"
           fi
 

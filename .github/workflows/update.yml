@@ -65,7 +65,9 @@ jobs:
       # ── 阶段 2: 评估验证 ──────────────────────────────
       - name: Flake check
         if: steps.diff.outputs.changed == 'true'
-        run: nix flake check --show-trace
+        env:
+          NIXPKGS_ALLOW_UNFREE: '1'
+        run: nix flake check --impure --show-trace
 
       # ── 阶段 3: 构建验证（自动修正 hash mismatch）─────
       - name: Build updated packages
@@ -134,6 +136,7 @@ jobs:
           declare -A attr_map=(
             [ccline]="ccline"
             [cli-proxy-api]="cli-proxy-api"
+            [mossx]="mossx"
             [rime-ice]="rime-ice"
             [elegant-theme]="elegant-theme"
             [apple-font]="apple-font-pingfang apple-font-pingfang-relaxed apple-font-pingfang-ui apple-font-pingfang-emoji"

@@ -1,0 +1,180 @@
+--- a/src/features/update/store.ts
++++ b/src/features/update/store.ts
+@@ -6,6 +6,8 @@
+ import { isWeb } from "@/lib/transport";
+ import { getAppVersion } from "@/lib/platform";
+ import { useReleaseNotesTabStore } from "./notes-tab";
++
++export const updatesManagedExternally = import.meta.env.VITE_DISABLE_UPDATER === "1";
+
+ export type UpdateStage =
+   | "idle"
+@@ -113,7 +115,7 @@
+   checkForUpdates: async (options) => {
+     // The LAN web-access frontend has no native shell to update; the desktop
+     // host serves it, so update checks are meaningless there.
+-    if (isWeb) return;
++    if (isWeb || updatesManagedExternally) return;
+
+     const requestId = ++checkRequestId;
+     const isStale = () => checkRequestId !== requestId;
+@@ -203,6 +205,7 @@
+   },
+
+   startUpdate: async () => {
++    if (updatesManagedExternally) return;
+     const update = pendingUpdate;
+     if (!update) {
+       await get().checkForUpdates({ interactive: true });
+--- a/src/features/settings/UpdateSection.tsx
++++ b/src/features/settings/UpdateSection.tsx
+@@ -7,7 +7,7 @@
+   SettingsSectionLabel,
+ } from "@/components/application/settings/settings-rows";
+ import { getAppVersion } from "@/lib/platform";
+-import { useUpdateStore, type UpdateStage } from "@/features/update/store";
++import { updatesManagedExternally, useUpdateStore, type UpdateStage } from "@/features/update/store";
+ import { useUpdateDescription } from "@/features/update/stage-message";
+
+ /** Update page: app identity + version and the check-for-updates row. */
+@@ -92,6 +92,9 @@
+   onStart: () => void;
+ }) {
+   const { t } = useTranslation();
++  if (updatesManagedExternally) {
++    return <span className="text-body-regular text-text-secondary">{t("settings.updateManagedExternally")}</span>;
++  }
+   if (inFlight) {
+     // Progress rides in the description; the CTA stays visible but inert so
+     // the row does not jump mid-install.
+--- a/src/features/update/ReleaseNotesPane.tsx
++++ b/src/features/update/ReleaseNotesPane.tsx
+@@ -12,7 +12,7 @@
+ import { CHANGELOG_DATA, changelogEntryFor, type ChangelogEntry } from "@/version/changelog";
+ import { useReleaseNotesTabStore } from "./notes-tab";
+ import { useUpdateDescription } from "./stage-message";
+-import { useUpdateStore, type UpdateStage } from "./store";
++import { updatesManagedExternally, useUpdateStore, type UpdateStage } from "./store";
+
+ /**
+  * Resolve content to display. Shows both EN and ZH when both exist,
+@@ -124,6 +124,9 @@
+         )}
+       </div>
+
++      {updatesManagedExternally ? (
++        <span className="text-caption-1-regular text-text-secondary">{t("settings.updateManagedExternally")}</span>
++      ) : (
+       <div className="flex shrink-0 items-center gap-2">
+         {stage === "available" && (
+           <Button size="small" variant="primary" onClick={onUpdate}>
+@@ -153,6 +156,7 @@
+           </span>
+         </Button>
+       </div>
++      )}
+     </div>
+   );
+ }
+--- a/src/i18n/zh.ts
++++ b/src/i18n/zh.ts
+@@ -822,6 +822,7 @@
+     socialTitle: "关注我们",
+     socialDocs: "官方文档",
+     checkUpdates: "检查更新",
++    updateManagedExternally: "请通过 Nix 更新此应用",
+     updateChecking: "正在检查更新…",
+     updateLatest: "已是最新版本",
+     updateLatestDetail: "当前已是最新版本 · 最新版为 v{{version}}（{{date}} 发布）",
+--- a/src/i18n/en.ts
++++ b/src/i18n/en.ts
+@@ -857,6 +857,7 @@
+     socialTitle: "Follow Us",
+     socialDocs: "Documentation",
+     checkUpdates: "Check for Updates",
++    updateManagedExternally: "Update this application through Nix",
+     updateChecking: "Checking for updates…",
+     updateLatest: "You're up to date",
+     updateLatestDetail: "You're up to date · latest is v{{version}} (released {{date}})",
+--- a/src/i18n/ko.ts
++++ b/src/i18n/ko.ts
+@@ -806,6 +806,7 @@
+     socialTitle: "팔로우하기",
+     socialDocs: "문서",
+     checkUpdates: "업데이트 확인",
++    updateManagedExternally: "Nix를 통해 이 앱을 업데이트하세요",
+     updateChecking: "업데이트 확인 중…",
+     updateLatest: "최신 버전입니다",
+     updateLatestDetail: "최신 버전입니다 · 최신 v{{version}} ({{date}} 출시)",
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -121,7 +121,6 @@
+     plugins::asset_protocol::register(preview_protocol::register(tauri::Builder::default()))
+         .plugin(tauri_plugin_opener::init())
+         .plugin(tauri_plugin_dialog::init())
+-        .plugin(tauri_plugin_updater::Builder::new().build())
+         .plugin(tauri_plugin_process::init())
+         .plugin(
+             tauri_plugin_global_shortcut::Builder::new()
+--- a/src-tauri/capabilities/default.json
++++ b/src-tauri/capabilities/default.json
+@@ -21,7 +21,6 @@
+       ]
+     },
+     "dialog:default",
+-    "updater:default",
+     "process:default"
+   ]
+ }
+--- /dev/null
++++ b/src/features/update/managed-updates.test.tsx
+@@ -0,0 +1,49 @@
++import { act } from "react";
++import { createRoot } from "react-dom/client";
++import { afterAll, expect, it, vi } from "vitest";
++
++vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
++vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
++vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
++vi.mock("@/lib/transport", () => ({ isWeb: false }));
++vi.mock("@/lib/platform", () => ({
++  getAppVersion: async () => "1.1.9",
++  openExternal: vi.fn(),
++}));
++
++vi.stubEnv("VITE_DISABLE_UPDATER", "1");
++afterAll(() => vi.unstubAllEnvs());
++const { useUpdateStore } = await import("./store");
++
++it("never checks, downloads or restarts when updates are managed by Nix", async () => {
++  const { invoke } = await import("@tauri-apps/api/core");
++  const { check } = await import("@tauri-apps/plugin-updater");
++  const { relaunch } = await import("@tauri-apps/plugin-process");
++  await useUpdateStore.getState().checkForUpdates();
++  await useUpdateStore.getState().checkForUpdates({ interactive: true });
++  await useUpdateStore.getState().startUpdate();
++  expect(check).not.toHaveBeenCalled();
++  expect(invoke).not.toHaveBeenCalled();
++  expect(relaunch).not.toHaveBeenCalled();
++  expect(useUpdateStore.getState().stage).toBe("idle");
++});
++
++it("explains Nix updates without offering check or install buttons", async () => {
++  await import("@/lib/i18n");
++  const { UpdateSection } = await import("@/features/settings/UpdateSection");
++  const { ReleaseNotesPane } = await import("./ReleaseNotesPane");
++  const { useReleaseNotesTabStore } = await import("./notes-tab");
++  useReleaseNotesTabStore.setState({ open: true, active: true });
++  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
++  const container = document.createElement("div");
++  document.body.appendChild(container);
++  const root = createRoot(container);
++  try {
++    await act(async () => root.render(<><UpdateSection /><ReleaseNotesPane /></>));
++    expect(container.textContent).toContain("Nix");
++    expect(container.querySelectorAll("button")).toHaveLength(0);
++  } finally {
++    await act(async () => root.unmount());
++    container.remove();
++  }
++});
