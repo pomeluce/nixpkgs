@@ -14,6 +14,7 @@
 | `ccs`                         | CLI  | Claude Code Switcher —— 模型配置切换（Nushell）  |
 | `cli-proxy-api`               | CLI  | CLIProxyAPI —— Go 服务端                         |
 | `elegant-theme`               | 主题 | Elegant GRUB2 主题                               |
+| `helium`                      | 应用 | Helium Chromium 浏览器                           |
 | `rime-ice`                    | 数据 | RIME 雾凇拼音输入方案                            |
 | `screenshot`                  | CLI  | 截图工具（wayshot + wl-clipboard + notify-send） |
 | `wpsoffice`                   | 应用 | WPS Office（deb 重打包）                         |
@@ -82,6 +83,7 @@ nix run github:pomeluce/nixpkgs#ccs
             environment.systemPackages = [
               pkgs.ccline          # 直接用，如同 nixpkgs 原生包
               pkgs.cli-proxy-api
+              pkgs.helium
               pkgs.rime-ice
             ];
           })
@@ -111,11 +113,51 @@ nixpkgs/
 │   ├── ccline/        # CCometixLine
 │   ├── cli-proxy-api/ # CLIProxyAPI
 │   ├── elegant-theme/ # GRUB2 主题
+│   ├── helium/        # Helium 浏览器
 │   ├── rime-ice/      # 雾凇拼音
 │   ├── scripts/       # Nushell 脚本工具
 │   └── wpsoffice/     # WPS Office
 └── LICENSE
 ```
+
+### Helium 浏览器
+
+flake 同时导出 `nixosModules.default` 和 `homeModules.default`。模块默认从本仓库构建 `pkgs.helium`，也可以通过 `programs.helium.package` 替换为其他 derivation。
+
+```nix
+# NixOS
+{
+  imports = [ helium.nixosModules.default ];
+
+  programs.helium = {
+    enable = true;
+    flags = [ "--ozone-platform-hint=auto" ];
+    extraArgs = [ "--proxy-server=http://127.0.0.1:7890" ];
+    desktopIntegration = true;
+    policies = {
+      BrowserSignin = 0;
+      PasswordManagerEnabled = false;
+    };
+  };
+}
+```
+
+NixOS 模块默认把策略写入 `/etc/chromium/policies/managed/helium.json` 和 `/etc/helium/policies/managed/helium.json`，可用 `policyPaths` 覆盖。Home Manager 模块使用 `xdg.configFile` 写入 `helium/policies/managed/policies.json`，路径可用 `policyPath` 覆盖。
+
+```nix
+# Home Manager
+{
+  imports = [ helium.homeModules.default ];
+
+  programs.helium = {
+    enable = true;
+    flags = [ "--start-maximized" ];
+    policies.BrowserSignin = 0;
+  };
+}
+```
+
+包仅支持 `x86_64-linux` 和 `aarch64-linux`，使用 Helium Linux 发布的预编译 `.deb`。启动 wrapper 在 shell 中判断 Wayland 环境，避免把条件表达式作为浏览器参数传入。
 
 ## 版本更新
 
@@ -156,6 +198,7 @@ nix shell nixpkgs#nix-update
 | -------------------- | ----------------------------------- | --------------------------------------------- |
 | `ccline`             | GitHub Release                      | ✅ `nix-update --flake`                       |
 | `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
+| `helium`             | GitHub Release（Linux `.deb`）      | ✅ `nix-update --flake`                       |
 | `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
