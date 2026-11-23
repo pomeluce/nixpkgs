@@ -7,8 +7,14 @@
 
 let
   cfg = config.programs.helium;
+  policyData = cfg.policies // cfg.extraOpts;
   package = cfg.package.override {
-    inherit (cfg) flags extraArgs desktopIntegration;
+    inherit (cfg)
+      flags
+      extraArgs
+      desktopIntegration
+      initialPrefs
+      ;
   };
 in
 {
@@ -57,6 +63,34 @@ in
       description = "Chrome Enterprise policies written as JSON.";
     };
 
+    extraOpts = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          ClearBrowsingDataOnExitList = [ "browsing_history" "cookies_and_other_site_data" ];
+          RestoreOnStartup = 5;
+        }
+      '';
+      description = "Additional Chrome/Helium policy values. These override duplicate keys in policies.";
+    };
+
+    initialPrefs = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      default = { };
+      example = lib.literalExpression ''
+        {
+          browser = { show_home_button = true; };
+          profile = { name = "Work"; using_default_name = false; };
+          helium = { };
+        }
+      '';
+      description = ''
+        Preferences merged into the selected Helium profile before launch.
+        The merge is skipped while an existing Helium process owns the profile.
+      '';
+    };
+
     policyPaths = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [
@@ -70,9 +104,9 @@ in
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ package ];
-    environment.etc = lib.mkIf (cfg.policies != { }) (
+    environment.etc = lib.mkIf (policyData != { }) (
       lib.genAttrs cfg.policyPaths (_: {
-        text = builtins.toJSON cfg.policies;
+        text = builtins.toJSON policyData;
       })
     );
   };

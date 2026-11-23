@@ -134,15 +134,50 @@ flake 同时导出 `nixosModules.default` 和 `homeModules.default`。模块默�
     flags = [ "--ozone-platform-hint=auto" ];
     extraArgs = [ "--proxy-server=http://127.0.0.1:7890" ];
     desktopIntegration = true;
+    extraOpts = {
+      ClearBrowsingDataOnExitList = [
+        "browsing_history"
+        "download_history"
+        "cookies_and_other_site_data"
+        "cached_images_and_files"
+        "site_settings"
+      ];
+      RestoreOnStartup = 5;
+      PasswordManagerEnabled = false;
+      BackgroundModeEnabled = false;
+    };
+    initialPrefs = {
+      browser = { show_home_button = true; };
+      profile = {
+        name = "Work";
+        using_default_name = false;
+      };
+      helium.browser = {
+        layout = 2; # 0 classic, 1 compact, 2 vertical, 3 dynamic
+        vertical_right_aligned = false;
+        centered_location_bar = true;
+        show_back_button = true;
+        show_reload_button = true;
+        show_extensions_button = false;
+      };
+      helium.services = {
+        enabled = false;
+        bangs = false;
+        browser_updates = false;
+        spellcheck_files = false;
+        web_push = false;
+      };
+    };
     policies = {
       BrowserSignin = 0;
-      PasswordManagerEnabled = false;
     };
   };
 }
 ```
 
-NixOS 模块默认把策略写入 `/etc/chromium/policies/managed/helium.json` 和 `/etc/helium/policies/managed/helium.json`，可用 `policyPaths` 覆盖。Home Manager 模块使用 `xdg.configFile` 写入 `helium/policies/managed/policies.json`，路径可用 `policyPath` 覆盖。
+`policies` 和 `extraOpts` 会合并为 managed policy，后者优先。NixOS 模块默认把策略写入 `/etc/chromium/policies/managed/helium.json` 和 `/etc/helium/policies/managed/helium.json`，可用 `policyPaths` 覆盖。Home Manager 模块使用 `xdg.configFile` 写入 `helium/policies/managed/policies.json`，路径可用 `policyPath` 覆盖。
+
+`initialPrefs` 会在启动前递归合并到当前 profile 的 `Preferences`，并同步更新 `Local State` 中的 profile 名称。浏览器进程已经运行时会跳过合并，写入采用临时文件加原子替换。常用 Helium preference 包括 `helium.browser.layout`、`helium.browser.ui_density`、`helium.browser.zen_mode`、`helium.browser.show_menu_button`、`helium.services.enabled` 和 `helium.global_privacy_control`。
 
 ```nix
 # Home Manager
