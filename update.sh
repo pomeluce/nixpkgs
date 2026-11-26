@@ -33,6 +33,24 @@ green() { printf '\033[32m%s\033[0m\n' "$1"; }
 yellow() { printf '\033[33m%s\033[0m\n' "$1"; }
 cyan() { printf '\033[36m%s\033[0m\n' "$1"; }
 
+# Keep the flake source alive while nix-update evaluates it.  A temporary
+# `nix shell` can otherwise allow the source path to be collected before the
+# subsequent nix-instantiate call.
+FLAKE_ROOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nixpkgs-flake-root.XXXXXX")
+
+cleanup_flake_root() {
+  rm -rf "$FLAKE_ROOT_DIR"
+}
+
+trap cleanup_flake_root EXIT
+
+refresh_flake_root() {
+  local flake_path
+  flake_path=$(nix flake archive --json . | python3 -c 'import json, sys; print(json.load(sys.stdin)["path"])')
+  rm -f "$FLAKE_ROOT_DIR/source"
+  nix-store --realise --add-root "$FLAKE_ROOT_DIR/source" --indirect "$flake_path" >/dev/null
+}
+
 # nix-update 基础参数（不使用 --commit，由本脚本控制 commit 格式）
 NIX_UPDATE_FLAGS=("--flake")
 
@@ -99,6 +117,7 @@ run_nix_update() {
   shift
   local extra_flags=("$@")
 
+  refresh_flake_root
   if nix-update "${NIX_UPDATE_FLAGS[@]}" "${extra_flags[@]}" "$pkg"; then
     if $AUTO_COMMIT && ! $CHECK_ONLY; then
       commit_if_changed "$pkg"
@@ -116,6 +135,7 @@ update_github_release() {
   local pkg="$1"
   cyan ">>> 检查 $pkg (GitHub Release)..."
   if $CHECK_ONLY; then
+    refresh_flake_root
     nix-update --flake "$pkg" --build 2>&1 | tail -3 || true
   else
     run_nix_update "$pkg"
@@ -131,6 +151,7 @@ update_git_branch() {
   cyan ">>> 检查 $pkg (Git branch=$branch)..."
 
   if $CHECK_ONLY; then
+    refresh_flake_root
     nix-update --flake --version="branch=$branch" "$pkg" 2>&1 | tail -3 || true
   else
     run_nix_update "$pkg" --version="branch=$branch"
