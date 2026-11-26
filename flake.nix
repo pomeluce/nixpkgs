@@ -27,8 +27,6 @@
 
       flake = {
         overlays.default = final: prev: import ./pkgs { pkgs = final; };
-        nixosModules.default = import ./modules/nixos;
-        homeModules.default = import ./modules/home-manager;
       };
     };
 }
