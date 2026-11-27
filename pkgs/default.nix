@@ -6,7 +6,6 @@
   apple-font-pingfang-emoji = pkgs.callPackage ./apple-font/ttf-pingfang-emoji.nix { };
   ccline = pkgs.callPackage ./ccline { };
   ccs = pkgs.callPackage ./scripts/ccs { };
-  cli-proxy-api = pkgs.callPackage ./cli-proxy-api { };
   elegant-theme = pkgs.callPackage ./elegant-theme { };
   rime-ice = pkgs.callPackage ./rime-ice { };
   screenshot = pkgs.callPackage ./scripts/screenshot { };

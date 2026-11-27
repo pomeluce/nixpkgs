@@ -12,7 +12,6 @@
 | `apple-font-pingfang-emoji`   | 字体 | Apple Color Emoji（含 fontconfig）               |
 | `ccline`                      | CLI  | CCometixLine —— Rust 终端工具                    |
 | `ccs`                         | CLI  | Claude Code Switcher —— 模型配置切换（Nushell）  |
-| `cli-proxy-api`               | CLI  | CLIProxyAPI —— Go 服务端                         |
 | `elegant-theme`               | 主题 | Elegant GRUB2 主题                               |
 | `rime-ice`                    | 数据 | RIME 雾凇拼音输入方案                            |
 | `screenshot`                  | CLI  | 截图工具（wayshot + wl-clipboard + notify-send） |
@@ -45,7 +44,6 @@
       devShells.${system}.default = nixpkgs.legacyPackages.${system}.mkShell {
         packages = [
           apkgs.packages.${system}.ccline
-          apkgs.packages.${system}.cli-proxy-api
         ];
       };
     };
@@ -81,7 +79,6 @@ nix run github:pomeluce/nixpkgs#ccs
             nixpkgs.overlays = [ apkgs.overlays.default ];
             environment.systemPackages = [
               pkgs.ccline          # 直接用，如同 nixpkgs 原生包
-              pkgs.cli-proxy-api
               pkgs.rime-ice
             ];
           })
@@ -109,7 +106,6 @@ nixpkgs/
 │   ├── default.nix    # 包集定义，接受 { pkgs, ... }
 │   ├── apple-font/    # 苹果字体四件套
 │   ├── ccline/        # CCometixLine
-│   ├── cli-proxy-api/ # CLIProxyAPI
 │   ├── elegant-theme/ # GRUB2 主题
 │   ├── rime-ice/      # 雾凇拼音
 │   ├── scripts/       # Nushell 脚本工具
@@ -155,7 +151,6 @@ nix shell nixpkgs#nix-update
 | 包名                 | 更新源                              | 自动化                                        |
 | -------------------- | ----------------------------------- | --------------------------------------------- |
 | `ccline`             | GitHub Release                      | ✅ `nix-update --flake`                       |
-| `cli-proxy-api`      | GitHub Release（Go）                | ✅ `nix-update --flake`                       |
 | `rime-ice`           | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `elegant-theme`      | Git main branch                     | ✅ `nix-update --flake --version=branch=main` |
 | `apple-font-*`       | GitHub Release（版本在 asset 名中） | ❌ 手动                                       |
@@ -248,7 +243,6 @@ NIXPKGS_ALLOW_UNFREE=1 nix flake check --impure
 # === 阶段 2: 构建 ===
 # 逐个构建包（首次或 hash 变更时需要下载依赖，耗时较长）
 nix build '.#ccline'           # Rust 包，有 cargoHash
-nix build '.#cli-proxy-api'    # Go 包，有 vendorHash
 nix build '.#elegant-theme'    # GRUB 主题
 nix build '.#rime-ice'         # RIME 数据包
 nix build '.#wpsoffice'        # deb 重打包（需 --impure）
@@ -260,7 +254,6 @@ nix build '.#ccs'              # Nushell 脚本
 nix run '.#ccline'                        # 检查状态栏输出
 nix run '.#ccs' use-model                 # 检查模型切换
 nix run '.#screenshot' -- --help           # 检查截图帮助
-nix run '.#cli-proxy-api' -- --help       # 检查帮助文本
 
 # RIME 数据包验证安装内容：
 nix build '.#rime-ice' --print-out-paths
@@ -277,11 +270,6 @@ nix store gc              # 实际清理
 ```
 
 ### 针对特定包类型的注意事项
-
-**Go 包（`cli-proxy-api`）：**
-
-- `vendorHash` 变化时需要更新：先用空字符串 `""` 替换 hash，构建失败后会输出正确 hash
-- 如果上游修改了 `go.mod` 的 go 版本，检查 `postPatch` 是否仍需生效
 
 **Rust 包（`ccline`）：**
 

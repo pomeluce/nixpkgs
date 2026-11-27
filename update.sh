@@ -179,10 +179,6 @@ if [[ -z "$TARGET" ]] || [[ "$TARGET" == "ccline" ]]; then
   update_github_release "ccline"
 fi
 
-if [[ -z "$TARGET" ]] || [[ "$TARGET" == "cli-proxy-api" ]]; then
-  update_github_release "cli-proxy-api"
-fi
-
 if [[ -z "$TARGET" ]] || [[ "$TARGET" == "rime-ice" ]]; then
   update_git_branch "rime-ice" "main"
 fi
